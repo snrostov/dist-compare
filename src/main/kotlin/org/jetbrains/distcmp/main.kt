@@ -118,6 +118,7 @@ fun main(args: Array<String>) {
     """
     )
 
+    result.flush()
     zipOutputStream.closeEntry()
     zipOutputStream.close()
 }
@@ -198,12 +199,12 @@ class Context(val relativePath: String, val ext: String) {
                 matchText(FileKind.TEXT, expectedTxt, actualTxt, expected, actual)
             }
             else -> if (expected.content.size != actual.content.size) {
-                reportMismatch(FileStatus.MISMATCHED, FileKind.BIN) {
+                reportMismatch(FileStatus.MISMATCHED, FileKind.BIN)/* {
                     println(
                         "binary contents mismatched by size: " +
                                 "${expected.content.size} != ${actual.content.size}"
                     )
-                }
+                }*/
             } else {
                 val expectedTxt = expected.content.inputStream.bufferedReader().readText()
                 val actualTxt = actual.content.inputStream.bufferedReader().readText()

@@ -3,3 +3,4 @@
 out/
 .gradle
 !gradle-wrapper.jar
+**/node_modules/

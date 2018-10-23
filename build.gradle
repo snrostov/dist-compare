@@ -13,6 +13,9 @@ repositories {
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     compile group: 'org.apache.commons', name: 'commons-vfs2', version: '2.2'
+//    compile 'org.ow2.asm:asm-all:6.0_BETA'
+    compile group: 'com.github.wumpz', name: 'diffutils', version: '2.2'
+    compile 'com.google.code.gson:gson:2.8.5'
 }
 
 compileKotlin {

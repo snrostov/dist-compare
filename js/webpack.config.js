@@ -18,6 +18,14 @@ module.exports = {
                 test: /\.css$/,
                 use: ['style-loader', 'css-loader']
             },
+            // {
+            //     test: /\.(?:png|jpe?g|svg|gif)$/i,
+            //     use: [{
+            //         loader: 'url-loader', options: {
+            //             // limit: 10000  // Inline images smaller than 10kb as data URIs
+            //         }
+            //     }]
+            // },
             {
                 test: /\.(gif|png|jpe?g|svg)$/i,
                 use: [
@@ -37,7 +45,7 @@ module.exports = {
         extensions: ['.tsx', '.ts', '.js']
     },
     output: {
-        filename: 'bundle.js',
+        filename: 'app.js',
         path: path.resolve(__dirname, 'dist')
     }
 };

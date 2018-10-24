@@ -5,22 +5,18 @@ import com.github.difflib.UnifiedDiffUtils
 import com.google.gson.GsonBuilder
 import org.apache.commons.vfs2.FileObject
 import org.apache.commons.vfs2.VFS
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
-import java.nio.charset.Charset
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.zip.DeflaterOutputStream
-import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
 
 val manager = VFS.getManager()
-val reports = TreeMap<String, MutableList<Context>>()
+val reports = TreeMap<String, MutableList<Item>>()
 val items = mutableListOf<FileInfo>()
 
 @Volatile
@@ -29,7 +25,7 @@ var allScheduled = false
 var totalScheduled: Int = 0
 var totalProcessed = AtomicInteger()
 val totalEstimated = 52870
-val reportsDir = File("/Users/jetbrains/jps-report/report-1")
+val reportsDir = File("/Users/jetbrains/dist-compare/js/dist/diff")
 
 val textFileTypes = listOf(
     "txt",
@@ -57,9 +53,11 @@ val textFileTypes = listOf(
     "xml"
 )
 
-lateinit var result: OutputStreamWriter
-val writeFiles = false
-val writeHtml = true
+lateinit var html: OutputStreamWriter
+lateinit var zipOutputStream: ZipOutputStream
+
+val writeFiles = true
+val writeHtml = false
 val lastId = AtomicInteger()
 val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
 //val pool = Executors.newFixedThreadPool(100)
@@ -69,30 +67,15 @@ fun main(args: Array<String>) {
     println("Removing previous report...")
     reportsDir.deleteRecursively()
 
-    val resultFile = reportsDir.resolve("report.html.zip")
-    resultFile.parentFile.mkdirs()
-    resultFile.createNewFile()
-    val zipOutputStream = ZipOutputStream(resultFile.outputStream())
-    zipOutputStream.putNextEntry(ZipEntry("report.html"))
-    result = zipOutputStream.writer()
-    result.write(
-        """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Dist compare report</title>
-    <script type="text/javascript" src="app.js"></script>
-</head>
-<body>
-        """
-    )
+    if (writeHtml) {
+        htmlStart()
+    }
 
     val expected = File("/Users/jetbrains/kotlin/dist/artifacts/ideaPlugin/Kotlin")
     val actual = File("/Users/jetbrains/tasks/out/artifacts/ideaPlugin")
 
     print("\r...")
-    Context("", "root")
+    Item("", "root")
         .visit(manager.resolveFile(expected, ""), manager.resolveFile(actual, ""))
 
     allScheduled = true
@@ -105,29 +88,27 @@ fun main(args: Array<String>) {
         println("$type: ${list.size}")
     }
 
-    result.write("\n\n<script type=\"text/javascript\">\ninit(")
+    if (writeFiles) {
+        reportsDir.mkdirs()
+        reportsDir.resolve("data.json").writer().use {
+            GsonBuilder()
+                .setPrettyPrinting()
+                .create()
+                .toJson(items, it)
+        }
+    }
 
-    GsonBuilder().create().toJson(items, result)
-
-    result.write(")\n</script>")
-
-    result.write(
-        """
-</body>
-</html>
-    """
-    )
-
-    result.flush()
-    zipOutputStream.closeEntry()
-    zipOutputStream.close()
+    if (writeHtml) {
+        htmlEnd()
+    }
 }
 
-class Context(val relativePath: String, val ext: String) {
+class Item(val relativePath: String, ext: String) {
     val id = lastId.incrementAndGet()
 
     // heruistic to detect files without extenstion
     val badExt = ext.isBlank() || (ext.any { it.isUpperCase() } && ext.any { it.isLowerCase() })
+    val ext = if (badExt) "" else ext
 
     fun visit(expected: FileObject, actual: FileObject) {
         when {
@@ -199,12 +180,7 @@ class Context(val relativePath: String, val ext: String) {
                 matchText(FileKind.TEXT, expectedTxt, actualTxt, expected, actual)
             }
             else -> if (expected.content.size != actual.content.size) {
-                reportMismatch(FileStatus.MISMATCHED, FileKind.BIN)/* {
-                    println(
-                        "binary contents mismatched by size: " +
-                                "${expected.content.size} != ${actual.content.size}"
-                    )
-                }*/
+                reportMismatch(FileStatus.MISMATCHED, FileKind.BIN)
             } else {
                 val expectedTxt = expected.content.inputStream.bufferedReader().readText()
                 val actualTxt = actual.content.inputStream.bufferedReader().readText()
@@ -226,7 +202,7 @@ class Context(val relativePath: String, val ext: String) {
         actual: FileObject
     ) {
         if (expectedTxt == actualTxt) reportMatch(fileKind)
-        else reportMismatch(FileStatus.MISMATCHED, fileKind) {
+        else reportMismatch(FileStatus.MISMATCHED, fileKind, true) {
             val lines = expectedTxt.lines()
 
             val diff = UnifiedDiffUtils.generateUnifiedDiff(
@@ -261,6 +237,7 @@ class Context(val relativePath: String, val ext: String) {
     fun reportMismatch(
         mismatchExt: FileStatus,
         fileKind: FileKind,
+        writeDiff: Boolean = false,
         outputWriter: (PrintWriter.() -> Unit)? = null
     ) {
         val kind = if (badExt) ".OTHER.$mismatchExt" else "$ext.$mismatchExt"
@@ -270,30 +247,15 @@ class Context(val relativePath: String, val ext: String) {
 
         items.add(FileInfo(id, relativePath, badExt, ext, mismatchExt, fileKind, false))
 
-        if (writeFiles) {
+        if (outputWriter != null && writeDiff && writeFiles) {
             val reportFile =
-                File("${reportsDir.path}/$relativePath.$mismatchExt")
+                File("${reportsDir.path}/$relativePath.patch")
             reportFile.parentFile.mkdirs()
-            reportFile.printWriter().use {
-                if (outputWriter != null) {
-                    outputWriter(it)
-                } else {
-                    println()
-                }
-            }
+            reportFile.printWriter().use(outputWriter)
         }
 
-        if (writeHtml && outputWriter != null) {
-            val bytes = ByteArrayOutputStream()
-            outputWriter(PrintWriter(DeflaterOutputStream(bytes)))
-            bytes.close()
-
-            if (bytes.size() != 0) {
-                val base64 = String(Base64.getEncoder().encode(bytes.toByteArray()), Charset.forName("UTF-8"))
-                synchronized(result) {
-                    result.write("<script id='patch-$id' type='text/plain'>\n$base64\n</script>\n")
-                }
-            }
+        if (writeDiff && writeHtml && outputWriter != null) {
+            htmlWriteDiff(outputWriter)
         }
     }
 
@@ -302,7 +264,7 @@ class Context(val relativePath: String, val ext: String) {
         items.add(FileInfo(id, relativePath, badExt, ext, FileStatus.MATCHED, fileKind, false))
     }
 
-    private fun child(name: String, ext: String) = Context("$relativePath/$name", ext).also {
+    private fun child(name: String, ext: String) = Item("$relativePath/$name", ext).also {
         reportProgress(0)
     }
 
@@ -318,4 +280,3 @@ class Context(val relativePath: String, val ext: String) {
         }
     }
 }
-

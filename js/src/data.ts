@@ -15,7 +15,7 @@ export class DataStore {
         this.all = data;
 
         for (let item of data) {
-            if (item.noExtension) {
+            if (item.noExtension || item.extension.length == 0) {
                 item.extension = "NO EXT"
             }
         }
@@ -77,9 +77,9 @@ export class DataStore {
             return fieldValuesList.push(value);
         });
 
-        rootNode._children[0].collapseSingleChild();
+        rootNode.collapseSingleChild();
 
-        return new Data(fieldValuesList, rootNode._children[0])
+        return new Data(fieldValuesList, rootNode._children[0] || rootNode)
     }
 }
 
@@ -140,6 +140,10 @@ export class Node /*implements FancytreeNode*/ {
     }
 
     collapseSingleChild() {
+        if (this._children.length > 1) {
+            this.title = this.title + " (" + this.count + ")"
+        }
+
         if (this._children.length == 1) {
             const child = this._children[0];
             child.collapseSingleChild();

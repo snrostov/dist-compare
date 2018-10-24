@@ -1,7 +1,6 @@
-import {Inflate} from "pako/lib/inflate";
+// import {Inflate} from "pako/lib/inflate";
 import {DataStore} from "./data";
-import {renderWorkspace, workspace} from "./ui";
-import * as ReactDOM from "react-dom";
+import {renderWorkspace} from "./ui";
 
 require("reset-css/reset.css");
 
@@ -23,17 +22,25 @@ interface Item {
     noExtension: boolean
 }
 
-function loadPatch(id) {
-    let data = document.getElementById("patch-" + id).innerText;
-    let inflater = new Inflate({});
-    inflater.push(atob(data));
-    return inflater.result
+export function loadPatch(item: Item): Promise<string> {
+    // let data = document.getElementById("patch-" + id).innerText;
+    // let inflater = new Inflate({});
+    // inflater.push(atob(data), true);
+    // return new TextDecoder("utf-8").decode(inflater.result)
+
+    return fetch('diff' + item.relativePath + ".patch")
+        .then(function (response) {
+            return response.text();
+        })
 }
 
 export const store = new DataStore();
 
 function init(data: Item[]) {
-    fetch('data.json')
+    // store.load(data);
+    // renderWorkspace()
+
+    fetch('diff/data.json')
         .then(function (response) {
             return response.json();
         })

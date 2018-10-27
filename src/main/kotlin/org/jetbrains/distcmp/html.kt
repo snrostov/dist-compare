@@ -13,9 +13,9 @@ fun htmlStart() {
     val resultFile = reportsDir.resolve("report.html.zip")
     resultFile.parentFile.mkdirs()
     resultFile.createNewFile()
-    zipOutputStream = ZipOutputStream(resultFile.outputStream())
-    zipOutputStream.putNextEntry(ZipEntry("report.html"))
-    html = zipOutputStream.writer()
+    htmlZip = ZipOutputStream(resultFile.outputStream())
+    htmlZip.putNextEntry(ZipEntry("report.html"))
+    html = htmlZip.writer()
     html.write(
         """
 <!DOCTYPE html>
@@ -60,7 +60,7 @@ fun htmlEnd() {
     )
 
     html.flush()
-    zipOutputStream.closeEntry()
-    zipOutputStream.close()
+    htmlZip.closeEntry()
+    htmlZip.close()
 }
 

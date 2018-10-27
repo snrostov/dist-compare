@@ -3,39 +3,31 @@ import * as React from "react";
 import {loadPatch, store} from "./app";
 import * as ReactDOM from "react-dom";
 import {Diff2Html as diff2html} from "diff2html";
-// import {Diff2HtmlUI} from "diff2html/dist/diff2html-ui";
 
-require("diff2html/dist/diff2html.css");
-
-require('jquery.fancytree/dist/skin-lion/ui.fancytree.css');
 const $ = require('jquery');
 require('jquery.fancytree');
+require("diff2html/dist/diff2html.css");
+require('jquery.fancytree/dist/skin-lion/ui.fancytree.css');
+
 const selectedFilters = {};
 
 export function renderWorkspace() {
-    const e0 = document.getElementById("workspace");
-    if (e0) e0.remove();
-    const e = document.createElement("workspace");
-    e.id = "workspace";
-    document.body.appendChild(e);
+    // force recreate all workspace, updating fancytree is hard
+    const oldWorkspace = document.getElementById("workspace");
+    if (oldWorkspace) oldWorkspace.remove();
 
-    console.log(selectedFilters);
+    const newWorkspace = document.createElement("workspace");
+    newWorkspace.id = "workspace";
+    document.body.appendChild(newWorkspace);
 
     const data = store.apply(selectedFilters);
 
     ReactDOM.render(
         workspace(data),
-        e
+        newWorkspace
     );
 
-    const tree = document.getElementById("tree");
-
     $("#tree").fancytree({
-        // /kotlinc/lib/kotlin-compiler.jar/com/intellij/psi/impl/source/PsiJavaFileBaseImpl.class
-        // extensions: ["table"],
-        // table: {
-        //     indentation: 20,      // indent 20px per node level
-        // },
         source: data.treeRoot._children,
         lazyLoad: function (event, data) {
             data.result = data.node.data._children;
@@ -47,22 +39,15 @@ export function renderWorkspace() {
                 if (patch) {
                     const x = diff2html;
                     patch.then(text => {
-                        console.log(text);
-                        document.getElementById("diff").innerHTML =
-                            x.getPrettyHtml(text, {
-                                outputFormat: "side-by-side"
-                            });
+                        // noinspection UnnecessaryLocalVariableJS
+                        const diffHtml = x.getPrettyHtml(text, {outputFormat: "side-by-side"});
+                        document.getElementById("diff").innerHTML = diffHtml
                     })
                 } else {
                     document.getElementById("diff").innerText = "Diff not available"
                 }
             }
         }
-        // renderColumns: function (event, data) {
-        //     let node = data.node,
-        //         $tdList = $(node.tr).find(">td");
-        //     $tdList.eq(1).text(node.data.count);
-        // }
     });
 }
 
@@ -73,29 +58,10 @@ export function workspace(data: Data) {
         <div>
             {data.fieldValues.map(field => filter(field))}
         </div>
-        <div id="tree" style={{position:"absolute",zoom:0.9}}/>
-        <div id="diff" style={{position:"absolute",zoom:0.8,marginLeft:650}}/>
+        <div id="tree" style={{position: "absolute", zoom: 0.9}}/>
+        <div id="diff" style={{position: "absolute", zoom: 0.8, marginLeft: 650}}/>
     </div>
 }
-
-//         <table id="tree">
-//             <colgroup>
-//                 <col width="*"></col>
-//                 <col width="50px"></col>
-//             </colgroup>
-//             <thead>
-//             <tr>
-//                 <th></th>
-//                 <th></th>
-//             </tr>
-//             </thead>
-//             <tbody>
-//             <tr>
-//                 <td></td>
-//                 <td></td>
-//             </tr>
-//             </tbody>
-//         </table>
 
 function filter(values: FieldValues) {
     return <label key={values.field} style={{display: "inline-block"}}>
@@ -103,8 +69,8 @@ function filter(values: FieldValues) {
         <select
             name={values.field}
             size={5}
-            defaultValue={values.selected || "all"}
-        >
+            defaultValue={values.selected || "all"}>
+
             <option
                 key={"all"}
                 value={"all"}

@@ -7,7 +7,7 @@ import javax.lang.model.element.Modifier
 import javax.lang.model.element.NestingKind
 import javax.tools.JavaFileObject
 
-fun err(): Nothing = error("")
+fun shouldNotBeCalled(): Nothing = error("Should not be called")
 
 fun classToTxt(i: InputStream, name: String, modified: Long, uri: URI): String {
     val str = StringWriter()
@@ -21,31 +21,31 @@ fun classToTxt(i: InputStream, name: String, modified: Long, uri: URI): String {
     )
 
     p.write(p.read(object : JavaFileObject {
-        override fun openOutputStream(): OutputStream = err()
+        override fun openOutputStream(): OutputStream = shouldNotBeCalled()
 
-        override fun isNameCompatible(simpleName: String?, kind: JavaFileObject.Kind?): Boolean = err()
+        override fun isNameCompatible(simpleName: String?, kind: JavaFileObject.Kind?): Boolean = shouldNotBeCalled()
 
         override fun getKind(): JavaFileObject.Kind = javax.tools.JavaFileObject.Kind.CLASS
 
         override fun getName(): String = name
 
-        override fun getAccessLevel(): Modifier = err()
+        override fun getAccessLevel(): Modifier = shouldNotBeCalled()
 
-        override fun openWriter(): Writer = err()
+        override fun openWriter(): Writer = shouldNotBeCalled()
 
         override fun openInputStream(): InputStream = i
 
-        override fun getCharContent(ignoreEncodingErrors: Boolean): CharSequence = err()
+        override fun getCharContent(ignoreEncodingErrors: Boolean): CharSequence = shouldNotBeCalled()
 
         override fun getLastModified(): Long = modified
 
-        override fun getNestingKind(): NestingKind = err()
+        override fun getNestingKind(): NestingKind = shouldNotBeCalled()
 
         override fun toUri(): URI = uri
 
         override fun openReader(ignoreEncodingErrors: Boolean): Reader = i.reader()
 
-        override fun delete(): Boolean = err()
+        override fun delete(): Boolean = shouldNotBeCalled()
     }))
 
     return str.toString()

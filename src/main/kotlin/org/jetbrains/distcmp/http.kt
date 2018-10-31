@@ -29,30 +29,6 @@ internal class MyHandler : HttpHandler {
             exchange.responseBody.use {
                 Files.copy(file.toPath(), exchange.responseBody)
             }
-
-            // Object exists and is a file: accept with response code 200.
-//            val mime = when {
-//                path.endsWith(".js") -> "application/javascript"
-//                path.endsWith(".gif") -> "image/gif"
-//                path.endsWith(".patch") -> "text/plain"
-//                else -> "text/html"
-//            }
-//
-//            val h = exchange.responseHeaders
-//            h.set("Content-Type", mime)
-//            exchange.sendResponseHeaders(200, 0)
-//
-//            val os = exchange.responseBody
-//            val fs = FileInputStream(file)
-//            val buffer = ByteArray(0x10000)
-//            var count = 0
-//            while (true) {
-//                count = fs.read(buffer)
-//                if (count < 0) break
-//                os.write(buffer, 0, count)
-//            }
-//            fs.close()
-//            os.close()
         }
     }
 }

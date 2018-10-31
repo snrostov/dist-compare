@@ -1,4 +1,4 @@
-package org.jetbrains.distcmp
+package org.jetbrains.distcmp.utils
 
 import com.sun.tools.javap.JavapTask
 import java.io.*
@@ -23,7 +23,8 @@ fun classToTxt(i: InputStream, name: String, modified: Long, uri: URI): String {
     p.write(p.read(object : JavaFileObject {
         override fun openOutputStream(): OutputStream = shouldNotBeCalled()
 
-        override fun isNameCompatible(simpleName: String?, kind: JavaFileObject.Kind?): Boolean = shouldNotBeCalled()
+        override fun isNameCompatible(simpleName: String?, kind: JavaFileObject.Kind?): Boolean =
+            shouldNotBeCalled()
 
         override fun getKind(): JavaFileObject.Kind = javax.tools.JavaFileObject.Kind.CLASS
 
@@ -35,7 +36,8 @@ fun classToTxt(i: InputStream, name: String, modified: Long, uri: URI): String {
 
         override fun openInputStream(): InputStream = i
 
-        override fun getCharContent(ignoreEncodingErrors: Boolean): CharSequence = shouldNotBeCalled()
+        override fun getCharContent(ignoreEncodingErrors: Boolean): CharSequence =
+            shouldNotBeCalled()
 
         override fun getLastModified(): Long = modified
 

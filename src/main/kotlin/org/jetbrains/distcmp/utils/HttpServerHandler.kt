@@ -1,22 +1,18 @@
-package org.jetbrains.distcmp
+package org.jetbrains.distcmp.utils
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpHandler
+import org.jetbrains.distcmp.reportDir
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
 
-
-internal class MyHandler : HttpHandler {
+internal class HttpServerHandler : HttpHandler {
     @Throws(IOException::class)
     override fun handle(exchange: HttpExchange) {
-        val root = reportDir.path
-        val uri = exchange.requestURI
-        val path0 = uri.path.trim()
-        println(path0)
+        val path0 = exchange.requestURI.path.trim()
         val path = if (path0 == "/") "/index.html" else path0
-        val file = File(root + path).canonicalFile
-        println("looking for: $file")
+        val file = File(reportDir.path + path).canonicalFile
 
         if (!file.isFile) {
             val response = "404 (Not Found)\n"

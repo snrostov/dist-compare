@@ -5,6 +5,7 @@ interface Item {
     status: String
     kind: String
     noExtension: boolean
+    diffs: number
 }
 
 export class DataStore {
@@ -67,6 +68,7 @@ export class DataStore {
             for (let childName of path) {
                 parent = parent.getChild(childName);
                 parent.count++;
+                parent.diffs += item.diffs;
             }
 
             parent.leaf = item;
@@ -79,6 +81,7 @@ export class DataStore {
         });
 
         rootNode.collapseSingleChild();
+        rootNode.addCounts()
 
         return new Data(fieldValuesList, rootNode)
     }
@@ -120,6 +123,7 @@ export class Node /*implements FancytreeNode*/ {
 
     childrenByName: Map<string, Node> = new Map();
     _children: Node[] = [];
+    diffs: number = 0;
     count: number = 0;
     leaf: Item;
 
@@ -132,8 +136,6 @@ export class Node /*implements FancytreeNode*/ {
         let child = this.childrenByName.get(childName);
         if (!child) {
             child = new Node(childName);
-            this.folder = true;
-            this.lazy = true;
             this._children.push(child);
             this.childrenByName.set(childName, child);
         }
@@ -141,20 +143,38 @@ export class Node /*implements FancytreeNode*/ {
     }
 
     collapseSingleChild() {
-        if (this._children.length > 1) {
-            this.title = this.title + " (" + this.count + ")"
-        }
-
         if (this._children.length == 1) {
             const child = this._children[0];
             child.collapseSingleChild();
 
             this.title = this.title + "/" + child.title;
             this._children = child._children;
+            this.leaf = child.leaf
         } else {
             for (let child of this._children) {
                 child.collapseSingleChild()
             }
+        }
+    }
+
+    addCounts() {
+        if (this._children.length > 0) {
+            if (this.diffs > 0) {
+                this.title = this.title + " (" + this.count + " / " + this.diffs + ")"
+            } else {
+                this.title = this.title + " (" + this.count + ")"
+            }
+
+            this.folder = true;
+            this.lazy = true;
+        } else {
+            if (this.diffs > 0) {
+                this.title = this.title + " (" + this.diffs + ")"
+            }
+        }
+
+        for (let child of this._children) {
+            child.addCounts()
         }
     }
 }

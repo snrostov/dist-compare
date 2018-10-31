@@ -39,7 +39,7 @@ val textFileTypes = listOf(
     "dtd",
     "properties",
     "xml"
-)
+).map { it.toLowerCase() }.toSet()
 
 lateinit var html: OutputStreamWriter
 lateinit var htmlZip: ZipOutputStream
@@ -74,7 +74,12 @@ fun main(args: Array<String>) {
     println("\rtotal: $totalProcessed")
 
     reports.forEach { (type, list) ->
-        println("$type: ${list.size} items / ${list.sumBy { it.diffsCount }} diffs")
+        val diffs = list.sumBy { it.diffsCount }
+        if (diffs > 0) {
+            println("$type: ${list.size} items / $diffs diffs")
+        } else {
+            println("$type: ${list.size} items")
+        }
     }
 
     if (writeFiles) {
@@ -149,12 +154,14 @@ class Item(val relativePath: String, ext: String) {
 
         when {
             extension == "class" -> matchClass(expected, actual)
-            extension in textFileTypes || badExt -> matchText(expected, actual)
+            isTextFile(extension) -> matchText(expected, actual)
             else -> matchBin(expected, actual)
         }
 
         reportProgress(totalProcessed.incrementAndGet())
     }
+
+    private fun isTextFile(extension: String) = extension.toLowerCase() in textFileTypes || badExt
 
     private fun matchClass(expected: FileObject, actual: FileObject) {
         val expectedTxt = expected.content.inputStream.bufferedReader().readText()
@@ -240,8 +247,10 @@ class Item(val relativePath: String, ext: String) {
     ) {
         val kind = if (badExt) ".OTHER.$mismatchExt" else "$ext.$mismatchExt"
 
-        reports.getOrPut(kind) { mutableListOf() }.add(this)
-        reports.getOrPut("..TOTAL.$mismatchExt") { mutableListOf() }.add(this)
+        synchronized(reports) {
+            reports.getOrPut(kind) { mutableListOf() }.add(this)
+            reports.getOrPut("..TOTAL.$mismatchExt") { mutableListOf() }.add(this)
+        }
 
         if (outputWriter != null && writeDiff && writeFiles) {
             val reportFile =
@@ -254,12 +263,19 @@ class Item(val relativePath: String, ext: String) {
             htmlWriteDiff(outputWriter)
         }
 
-        items.add(FileInfo(id, relativePath, badExt, ext, mismatchExt, fileKind, false, diffsCount))
+        synchronized(items) {
+            items.add(FileInfo(id, relativePath, badExt, ext, mismatchExt, fileKind, false, diffsCount))
+        }
     }
 
     fun reportMatch(fileKind: FileKind) {
-        reports.getOrPut("MATCHED") { mutableListOf() }.add(this)
-        items.add(FileInfo(id, relativePath, badExt, ext, FileStatus.MATCHED, fileKind, false, 0))
+        synchronized(reports) {
+            reports.getOrPut("MATCHED") { mutableListOf() }.add(this)
+        }
+
+        synchronized(items) {
+            items.add(FileInfo(id, relativePath, badExt, ext, FileStatus.MATCHED, fileKind, false, 0))
+        }
     }
 
     private fun child(name: String, ext: String) = Item("$relativePath/$name", ext).also {

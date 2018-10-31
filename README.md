@@ -7,7 +7,7 @@ Build:
 - `gradlew build`
 
 How to use:
-- download latest release https://github.com/snrostov/dist-compare/releases/tag/0.1
+- download latest release https://github.com/snrostov/dist-compare/releases/latest
 - call `dist-compare <expected-dir> <actual-dir> <reports-dir>`
 - after all files are analyze report will be displayed in browser
 

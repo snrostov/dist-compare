@@ -6,12 +6,10 @@ Created and used to fix diffirences between JPS and Gradle build of Kotlin proje
 Build:
 - `gradlew build`
 
-How to use (`run.sh`):
-- `gradlew run <expected> <actual> <report>`, where
-  - `expected` - path to Gradle dist
-  - `actual` - path to JPS dist
-  - `report` - `js/dist/report`
-- open `js/dist/report/index.html` using IDEA (serve using IDEA internal web server)
+How to use:
+- download latest release https://github.com/snrostov/dist-compare/releases/tag/0.1
+- call `dist-compare <expected-dir> <actual-dir> <reports-dir>`
+- after all files are analyze report will be displayed in browser
 
 How it works:
 - FS traversed using `commons-vfs2`, including contents of `jars`

@@ -42,13 +42,7 @@ task yarnBuild(type: YarnTask) {
 
 
 jar {
-    //dependsOn(yarnBuild)
-
-//    from(configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }) {
-//        exclude "META-INF/*.SF"
-//        exclude "META-INF/*.DSA"
-//        exclude "META-INF/*.RSA"
-//    }
+    dependsOn(yarnBuild)
 
     from('js/dist') {
         include 'app.js'
@@ -59,15 +53,6 @@ jar {
     from('js/index.html') {
         into 'org/jetbrains/distcmp/js'
     }
-
-//    manifest {
-//        attributes 'Implementation-Title': 'Foobar',
-//                'Implementation-Version': version,
-//                'Built-By': System.getProperty('user.name'),
-//                'Built-Date': new Date(),
-//                'Built-JDK': System.getProperty('java.version'),
-//                'Main-Class': 'org.jetbrains.distcmp.MainKt'
-//    }
 }
 
 mainClassName = 'org.jetbrains.distcmp.MainKt'

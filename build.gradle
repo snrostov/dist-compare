@@ -15,6 +15,7 @@ dependencies {
     compile group: 'org.apache.commons', name: 'commons-vfs2', version: '2.2'
     compile group: 'com.github.wumpz', name: 'diffutils', version: '2.2'
     compile 'com.google.code.gson:gson:2.8.5'
+    compile files("${System.getProperty('java.home')}/../lib/tools.jar")
 }
 
 compileKotlin {

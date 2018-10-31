@@ -2,6 +2,7 @@ package org.jetbrains.distcmp
 
 import com.github.difflib.DiffUtils
 import com.github.difflib.UnifiedDiffUtils
+import com.github.difflib.patch.Delta
 import com.google.gson.GsonBuilder
 import com.sun.net.httpserver.HttpServer
 import jline.TerminalFactory
@@ -13,8 +14,11 @@ import java.io.File
 import java.io.PrintWriter
 import java.net.InetSocketAddress
 import java.net.URI
+import java.nio.ByteBuffer
 import java.nio.file.Files
+import java.security.MessageDigest
 import java.util.*
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -52,10 +56,14 @@ val lastId = AtomicInteger()
 val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
 val progressBar = ProgressBar("", 1, 300)
 
-fun main(args: Array<String>) {
-//    val expected = File("/Users/jetbrains/kotlin/dist")
-//    val actual = File("/Users/jetbrains/tasks/dist")
-//    diffDir = File("/Users/jetbrains/dist-compare/js/dist/diff")
+val devMode = false
+
+fun main(args0: Array<String>) {
+    val args = if (devMode) arrayOf(
+        "/Users/jetbrains/kotlin/dist",
+        "/Users/jetbrains/tasks/dist",
+        "/Users/jetbrains/dist-compare/js/dist"
+    ) else args0
 
     if (args.size !in 2..3) {
         println("Usage: distdiff <expected-dir> <actual-dir> [reports-dir]")
@@ -74,22 +82,15 @@ fun main(args: Array<String>) {
     requireDir(actual)
     requireDir(reportDir)
 
-    progressBar.extraMessage = "Removing previous report"
     progressBar.maxHint(-1)
     progressBar.start()
-    reportDir.deleteRecursively()
-    reportDir.mkdirs()
-
-    listOf(
-        "2da2b42ac8b23e24cd2b832c22626baf.gif",
-        "app.js",
-        "index.html"
-    ).forEach {
-        Files.copy(Item::class.java.getResourceAsStream("js/$it"), File(reportDir, it).toPath())
-    }
 
     diffDir = reportDir.resolve("diff")
-    diffDir.mkdirs()
+    diffDir.mkdir()
+
+    removePreviousReport()
+
+    if (!devMode) copyHtmlApp()
 
     Item("", "root")
         .visit(manager.resolveFile(expected, ""), manager.resolveFile(actual, ""))
@@ -99,16 +100,7 @@ fun main(args: Array<String>) {
     pool.shutdown()
     pool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
 
-    println("\rtotal: $totalProcessed")
-
-    reports.forEach { (type, list) ->
-        val diffs = list.sumBy { it.diffsCount }
-        if (diffs > 0) {
-            println("$type: ${list.size} items / $diffs diffs")
-        } else {
-            println("$type: ${list.size} items")
-        }
-    }
+    printTotals()
 
     if (writeFiles) {
         diffDir.mkdirs()
@@ -121,14 +113,67 @@ fun main(args: Array<String>) {
     }
 
     progressBar.stop()
-    println("http://localhost:8000")
-    val server = HttpServer.create(InetSocketAddress(8000), 0)
-    server.createContext("/", MyHandler())
-    server.executor = null
-    server.start()
 
-    if (Desktop.isDesktopSupported()) {
-        Desktop.getDesktop().browse(URI("http://localhost:8000"))
+    if (!devMode) {
+        println("http://localhost:8000")
+        val server = HttpServer.create(InetSocketAddress(8000), 0)
+        server.createContext("/", MyHandler())
+        server.executor = null
+        server.start()
+
+        if (Desktop.isDesktopSupported()) {
+            Desktop.getDesktop().browse(URI("http://localhost:8000"))
+        }
+    }
+}
+
+private fun removePreviousReport() {
+    setProgressMessage("Removing previous report")
+    if (devMode) {
+        diffDir.deleteRecursively()
+        diffDir.mkdirs()
+    } else {
+        reportDir.deleteRecursively()
+        reportDir.mkdirs()
+    }
+}
+
+private fun printTotals() {
+    println("\rtotal: $totalProcessed")
+
+    reports
+        .toList()
+        .sortedByDescending { it.second.size }
+        .take(10).forEach { (type, list) ->
+            val diffs = list.sumBy { it.diffsCount }
+            if (diffs > 0) {
+                println("$type: ${list.size} items / $diffs diffs")
+            } else {
+                println("$type: ${list.size} items")
+            }
+        }
+
+    val deltaUsages = mutableMapOf<Int, Int>()
+
+    items.forEach {
+        it.deltas.forEach {
+            deltaUsages[it] = deltaUsages.getOrDefault(it, 0) + 1
+        }
+    }
+
+    println("Top mismatches (10 of ${deltaUsages.size}):")
+    deltaUsages.entries.sortedByDescending { it.value }.take(10).forEach { (id, count) ->
+        println("- $id ($count)")
+    }
+}
+
+private fun copyHtmlApp() {
+    listOf(
+        "2da2b42ac8b23e24cd2b832c22626baf.gif",
+        "app.js",
+        "index.html"
+    ).forEach {
+        Files.copy(Item::class.java.getResourceAsStream("js/$it"), File(reportDir, it).toPath())
     }
 }
 
@@ -139,12 +184,33 @@ private fun requireDir(file: File) {
     }
 }
 
-class Item(val relativePath: String, ext: String) {
-    val id = lastId.incrementAndGet()
+val itemsByDigest = ConcurrentHashMap<ByteBuffer, Item>()
+val patchDigest = ConcurrentHashMap<ByteBuffer, Int>()
+val patchId = AtomicInteger()
+
+private fun deltasDigests(
+    deltas: MutableList<Delta<String>>
+): List<Int> {
+    return deltas.mapTo(mutableSetOf()) {
+        val md5 = MessageDigest.getInstance("MD5")
+        it.original.lines.forEach {
+            md5.update(it.toByteArray())
+        }
+        it.revised.lines.forEach {
+            md5.update(it.toByteArray())
+        }
+        val bb = ByteBuffer.wrap(md5.digest())
+        patchDigest.getOrPut(bb) { patchId.incrementAndGet() }
+    }.toList()
+}
+
+
+class Item(private val relativePath: String, ext: String) {
+    private val id = lastId.incrementAndGet()
 
     // heruistic to detect files without extenstion
-    val badExt = ext.isBlank() || (ext.any { it.isUpperCase() } && ext.any { it.isLowerCase() })
-    val ext = if (badExt) "" else ext
+    private val badExt = ext.isBlank() || (ext.any { it.isUpperCase() } && ext.any { it.isLowerCase() })
+    private val ext = if (badExt) "" else ext
     var diffsCount = 0
 
     fun visit(expected: FileObject, actual: FileObject) {
@@ -200,7 +266,7 @@ class Item(val relativePath: String, ext: String) {
             else -> matchBin(expected, actual)
         }
 
-        setProgressMessage()
+        setProgressMessage(relativePath)
         progressBar.step()
     }
 
@@ -210,9 +276,10 @@ class Item(val relativePath: String, ext: String) {
         val expectedTxt = expected.content.inputStream.bufferedReader().readText()
         val actualTxt = actual.content.inputStream.bufferedReader().readText()
 
-        if (actualTxt == expectedTxt) reportMatch(FileKind.CLASS)
-        else {
-            matchText(
+        when {
+            isAlreadyAnalyzed(expectedTxt, actualTxt) -> reportCopy(FileKind.CLASS)
+            actualTxt == expectedTxt -> reportMatch(FileKind.CLASS)
+            else -> matchText(
                 FileKind.CLASS,
                 classToText(expected),
                 classToText(actual),
@@ -226,7 +293,8 @@ class Item(val relativePath: String, ext: String) {
         val expectedTxt = expected.content.inputStream.bufferedReader().readText()
         val actualTxt = actual.content.inputStream.bufferedReader().readText()
 
-        matchText(FileKind.TEXT, expectedTxt, actualTxt, expected, actual)
+        if (isAlreadyAnalyzed(expectedTxt, actualTxt)) reportCopy(FileKind.TEXT)
+        else matchText(FileKind.TEXT, expectedTxt, actualTxt, expected, actual)
     }
 
     private fun matchBin(expected: FileObject, actual: FileObject) {
@@ -236,8 +304,11 @@ class Item(val relativePath: String, ext: String) {
             val expectedTxt = expected.content.inputStream.bufferedReader().readText()
             val actualTxt = actual.content.inputStream.bufferedReader().readText()
 
-            if (expectedTxt == actualTxt) reportMatch(FileKind.BIN)
-            else reportMismatch(FileStatus.MISMATCHED, FileKind.BIN)
+            when {
+                isAlreadyAnalyzed(expectedTxt, actualTxt) -> reportCopy(FileKind.BIN)
+                expectedTxt == actualTxt -> reportMatch(FileKind.BIN)
+                else -> reportMismatch(FileStatus.MISMATCHED, FileKind.BIN)
+            }
         }
     }
 
@@ -252,16 +323,19 @@ class Item(val relativePath: String, ext: String) {
         else reportMismatch(FileStatus.MISMATCHED, fileKind, true) {
             val lines = expectedTxt.lines()
 
+            val patches = DiffUtils.diff(lines, actualTxt.lines())
+            val deltas = patches.deltas
+            diffsCount = deltas.size
+            it.deltas = deltasDigests(deltas)
             val diff = UnifiedDiffUtils.generateUnifiedDiff(
                 expected.url.toString(),
                 actual.url.toString(),
                 lines,
-                DiffUtils.diff(lines, actualTxt.lines()),
+                patches,
                 5
             )
 
             val limit = 1000
-            diffsCount = diff.size
             diff.asSequence().take(limit).forEach {
                 println(it)
             }
@@ -272,6 +346,15 @@ class Item(val relativePath: String, ext: String) {
         }
     }
 
+    fun isAlreadyAnalyzed(expectedTxt: String, actualTxt: String): Boolean {
+        val md5 = MessageDigest.getInstance("MD5")
+        md5.update(expectedTxt.toByteArray())
+        md5.update(actualTxt.toByteArray())
+        val digest = ByteBuffer.wrap(md5.digest())
+
+        return itemsByDigest.getOrPut(digest) { this } !== this
+    }
+
     private fun classToText(expected: FileObject): String {
         val txt = classToTxt(
             expected.content.inputStream,
@@ -279,37 +362,40 @@ class Item(val relativePath: String, ext: String) {
             expected.content.lastModifiedTime,
             expected.url.toURI()
         )
-        return txt
+        return txt.lines().drop(3).joinToString("\n")
     }
 
-    fun reportMismatch(
+    private fun reportMismatch(
         mismatchExt: FileStatus,
         fileKind: FileKind,
         writeDiff: Boolean = false,
-        outputWriter: (PrintWriter.() -> Unit)? = null
+        outputWriter: (PrintWriter.(FileInfo) -> Unit)? = null
     ) {
-        val kind = if (badExt) ".OTHER.$mismatchExt" else "$ext.$mismatchExt"
+        val kind = if (badExt) "OTHER.$mismatchExt" else "$ext.$mismatchExt"
+        val item = FileInfo(id, relativePath, badExt, ext, mismatchExt, fileKind, false, diffsCount)
 
         synchronized(reports) {
             reports.getOrPut(kind) { mutableListOf() }.add(this)
-            reports.getOrPut("..TOTAL.$mismatchExt") { mutableListOf() }.add(this)
+            reports.getOrPut("TOTAL.$mismatchExt") { mutableListOf() }.add(this)
+        }
+
+        synchronized(items) {
+            items.add(item)
         }
 
         if (outputWriter != null && writeDiff && writeFiles) {
             val reportFile =
                 File("${diffDir.path}/$relativePath.patch")
             reportFile.parentFile.mkdirs()
-            reportFile.printWriter().use(outputWriter)
-        }
-
-        synchronized(items) {
-            items.add(FileInfo(id, relativePath, badExt, ext, mismatchExt, fileKind, false, diffsCount))
+            reportFile.printWriter().use {
+                outputWriter(it, item)
+            }
         }
     }
 
-    fun reportMatch(fileKind: FileKind) {
+    private fun reportMatch(fileKind: FileKind) {
         synchronized(reports) {
-            reports.getOrPut("MATCHED") { mutableListOf() }.add(this)
+            reports.getOrPut("TOTAL.MATCHED") { mutableListOf() }.add(this)
         }
 
         synchronized(items) {
@@ -317,12 +403,22 @@ class Item(val relativePath: String, ext: String) {
         }
     }
 
-    private fun child(name: String, ext: String) = Item("$relativePath/$name", ext).also {
-        setProgressMessage()
+    private fun reportCopy(fileKind: FileKind) {
+        synchronized(reports) {
+            reports.getOrPut("COPY") { mutableListOf() }.add(this)
+        }
+
+        synchronized(items) {
+            items.add(FileInfo(id, relativePath, badExt, ext, FileStatus.COPY, fileKind, false, 0))
+        }
     }
 
-    private fun setProgressMessage() {
-        val width = TerminalFactory.get().width - 55
-        progressBar.extraMessage = relativePath.takeLast(width).padEnd(width)
+    private fun child(name: String, ext: String) = Item("$relativePath/$name", ext).also {
+        setProgressMessage(relativePath)
     }
+}
+
+fun setProgressMessage(msg: String) {
+    val width = TerminalFactory.get().width - 55
+    progressBar.extraMessage = msg.takeLast(width).padEnd(width)
 }

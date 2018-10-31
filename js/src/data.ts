@@ -5,7 +5,8 @@ interface Item {
     status: String
     kind: String
     noExtension: boolean
-    diffs: number
+    diffs: number,
+    deltas: Array<number>
 }
 
 export class DataStore {

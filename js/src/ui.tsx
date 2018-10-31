@@ -68,7 +68,7 @@ function filter(values: FieldValues) {
         <div>{values.field}</div>
         <select
             name={values.field}
-            size={5}
+            size={6}
             defaultValue={values.selected || "all"}>
 
             <option

@@ -81,7 +81,7 @@ export class DataStore {
         });
 
         rootNode.collapseSingleChild();
-        rootNode.addCounts()
+        rootNode.addCounts();
 
         return new Data(fieldValuesList, rootNode)
     }

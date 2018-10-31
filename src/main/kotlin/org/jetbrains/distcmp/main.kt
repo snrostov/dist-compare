@@ -3,16 +3,21 @@ package org.jetbrains.distcmp
 import com.github.difflib.DiffUtils
 import com.github.difflib.UnifiedDiffUtils
 import com.google.gson.GsonBuilder
+import com.sun.net.httpserver.HttpServer
+import jline.TerminalFactory
+import me.tongfei.progressbar.ProgressBar
 import org.apache.commons.vfs2.FileObject
 import org.apache.commons.vfs2.VFS
+import java.awt.Desktop
 import java.io.File
-import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.net.InetSocketAddress
+import java.net.URI
+import java.nio.file.Files
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.zip.ZipOutputStream
 
 
 val manager = VFS.getManager()
@@ -22,10 +27,11 @@ val items = mutableListOf<FileInfo>()
 @Volatile
 var allScheduled = false
 
-var totalScheduled: Int = 0
+var totalScheduled = AtomicInteger(0)
 var totalProcessed = AtomicInteger()
-val totalEstimated = 52870
-lateinit var reportsDir: File
+
+lateinit var reportDir: File
+lateinit var diffDir: File
 
 val textFileTypes = listOf(
     "txt",
@@ -41,33 +47,55 @@ val textFileTypes = listOf(
     "xml"
 ).map { it.toLowerCase() }.toSet()
 
-lateinit var html: OutputStreamWriter
-lateinit var htmlZip: ZipOutputStream
-
 val writeFiles = true
-val writeHtml = false
 val lastId = AtomicInteger()
 val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
-val progressSync = Any()
+val progressBar = ProgressBar("", 1, 300)
 
 fun main(args: Array<String>) {
-    reportsDir = File("/Users/jetbrains/dist-compare/js/dist/diff")
+//    val expected = File("/Users/jetbrains/kotlin/dist")
+//    val actual = File("/Users/jetbrains/tasks/dist")
+//    diffDir = File("/Users/jetbrains/dist-compare/js/dist/diff")
 
-    println("Removing previous report...")
-    reportsDir.deleteRecursively()
-
-    if (writeHtml) {
-        htmlStart()
+    if (args.size !in 2..3) {
+        println("Usage: distdiff <expected-dir> <actual-dir> [reports-dir]")
+        return
     }
 
-    val expected = File("/Users/jetbrains/kotlin/dist/artifacts/ideaPlugin/Kotlin")
-    val actual = File("/Users/jetbrains/tasks/out/artifacts/ideaPlugin")
+    val expected = File(args[0])
+    val actual = File(args[1])
+    reportDir =
+            if (args.size == 3) File(args[2])
+            else Files.createTempDirectory("dist-compare").toFile()
 
-    print("\r...")
+    println("Comparing `$expected` vs `$actual` to `$reportDir`")
+
+    requireDir(expected)
+    requireDir(actual)
+    requireDir(reportDir)
+
+    progressBar.extraMessage = "Removing previous report"
+    progressBar.maxHint(-1)
+    progressBar.start()
+    reportDir.deleteRecursively()
+    reportDir.mkdirs()
+
+    listOf(
+        "2da2b42ac8b23e24cd2b832c22626baf.gif",
+        "app.js",
+        "index.html"
+    ).forEach {
+        Files.copy(Item::class.java.getResourceAsStream("js/$it"), File(reportDir, it).toPath())
+    }
+
+    diffDir = reportDir.resolve("diff")
+    diffDir.mkdirs()
+
     Item("", "root")
         .visit(manager.resolveFile(expected, ""), manager.resolveFile(actual, ""))
 
     allScheduled = true
+    progressBar.maxHint(totalScheduled.get().toLong())
     pool.shutdown()
     pool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
 
@@ -83,8 +111,8 @@ fun main(args: Array<String>) {
     }
 
     if (writeFiles) {
-        reportsDir.mkdirs()
-        reportsDir.resolve("data.json").writer().use {
+        diffDir.mkdirs()
+        diffDir.resolve("data.json").writer().use {
             GsonBuilder()
                 .setPrettyPrinting()
                 .create()
@@ -92,8 +120,22 @@ fun main(args: Array<String>) {
         }
     }
 
-    if (writeHtml) {
-        htmlEnd()
+    progressBar.stop()
+    println("http://localhost:8000")
+    val server = HttpServer.create(InetSocketAddress(8000), 0)
+    server.createContext("/", MyHandler())
+    server.executor = null
+    server.start()
+
+    if (Desktop.isDesktopSupported()) {
+        Desktop.getDesktop().browse(URI("http://localhost:8000"))
+    }
+}
+
+private fun requireDir(file: File) {
+    if (!file.isDirectory) {
+        println("$file is not a directory")
+        System.exit(1)
     }
 }
 
@@ -117,7 +159,7 @@ class Item(val relativePath: String, ext: String) {
                     matchItems(expected, actual)
                 }
 
-                totalScheduled++
+                totalScheduled.incrementAndGet()
             }
         }
     }
@@ -158,7 +200,8 @@ class Item(val relativePath: String, ext: String) {
             else -> matchBin(expected, actual)
         }
 
-        reportProgress(totalProcessed.incrementAndGet())
+        setProgressMessage()
+        progressBar.step()
     }
 
     private fun isTextFile(extension: String) = extension.toLowerCase() in textFileTypes || badExt
@@ -254,13 +297,9 @@ class Item(val relativePath: String, ext: String) {
 
         if (outputWriter != null && writeDiff && writeFiles) {
             val reportFile =
-                File("${reportsDir.path}/$relativePath.patch")
+                File("${diffDir.path}/$relativePath.patch")
             reportFile.parentFile.mkdirs()
             reportFile.printWriter().use(outputWriter)
-        }
-
-        if (writeDiff && writeHtml && outputWriter != null) {
-            htmlWriteDiff(outputWriter)
         }
 
         synchronized(items) {
@@ -279,18 +318,11 @@ class Item(val relativePath: String, ext: String) {
     }
 
     private fun child(name: String, ext: String) = Item("$relativePath/$name", ext).also {
-        reportProgress(0)
+        setProgressMessage()
     }
 
-    fun reportProgress(total: Int) {
-        if (total % 100 == 0) {
-            synchronized(progressSync) {
-                val progress =
-                    if (allScheduled) (total * 100 / totalEstimated).toString().padStart(3)
-                    else " ??"
-
-                print("\r [$progress% ] $relativePath")
-            }
-        }
+    private fun setProgressMessage() {
+        val width = TerminalFactory.get().width - 55
+        progressBar.extraMessage = relativePath.takeLast(width).padEnd(width)
     }
 }

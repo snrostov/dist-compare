@@ -1,5 +1,8 @@
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version '1.3.0-rc-190'
+    id 'org.jetbrains.kotlin.jvm' version '1.3.0'
+    id "com.moowork.node" version "1.2.0"
+    id 'application'
+    id 'distribution'
 }
 
 group 'org.jetbrains'
@@ -15,6 +18,7 @@ dependencies {
     compile group: 'org.apache.commons', name: 'commons-vfs2', version: '2.2'
     compile group: 'com.github.wumpz', name: 'diffutils', version: '2.2'
     compile 'com.google.code.gson:gson:2.8.5'
+    compile 'me.tongfei:progressbar:0.5.5'
     compile files("${System.getProperty('java.home')}/../lib/tools.jar")
 }
 
@@ -24,3 +28,46 @@ compileKotlin {
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
 }
+
+node {
+    version = '10.12.0'
+    yarnVersion = '1.10.1'
+    download = true
+    nodeModulesDir = file("${project.projectDir}/js")
+}
+
+task yarnBuild(type: YarnTask) {
+    args = ['run', 'build']
+}
+
+
+jar {
+    //dependsOn(yarnBuild)
+
+//    from(configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }) {
+//        exclude "META-INF/*.SF"
+//        exclude "META-INF/*.DSA"
+//        exclude "META-INF/*.RSA"
+//    }
+
+    from('js/dist') {
+        include 'app.js'
+        include '2da2b42ac8b23e24cd2b832c22626baf.gif'
+        into 'org/jetbrains/distcmp/js'
+    }
+
+    from('js/index.html') {
+        into 'org/jetbrains/distcmp/js'
+    }
+
+//    manifest {
+//        attributes 'Implementation-Title': 'Foobar',
+//                'Implementation-Version': version,
+//                'Built-By': System.getProperty('user.name'),
+//                'Built-Date': new Date(),
+//                'Built-JDK': System.getProperty('java.version'),
+//                'Main-Class': 'org.jetbrains.distcmp.MainKt'
+//    }
+}
+
+mainClassName = 'org.jetbrains.distcmp.MainKt'

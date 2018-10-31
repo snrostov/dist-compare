@@ -7,7 +7,8 @@ data class FileInfo(
     val extension: String,
     val status: FileStatus,
     val kind: FileKind,
-    val suppressed: Boolean
+    val suppressed: Boolean,
+    val diffs: Int
 )
 
 enum class FileStatus {

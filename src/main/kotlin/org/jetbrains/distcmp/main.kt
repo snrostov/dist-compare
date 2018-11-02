@@ -1,6 +1,7 @@
 package org.jetbrains.distcmp
 
 import com.google.gson.GsonBuilder
+import com.google.gson.stream.JsonWriter
 import com.sun.net.httpserver.HttpServer
 import jline.TerminalFactory
 import me.tongfei.progressbar.ProgressBar
@@ -15,20 +16,29 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-val devMode = false
-val writeFiles = true
+val devMode = System.getProperty("dev") != null
 lateinit var reportDir: File
 lateinit var diffDir: File
 
+val cpuExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
+val ioExecutor = Executors.newSingleThreadExecutor()
+
 val manager = VFS.getManager()
-val pool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
 val progressBar = ProgressBar("", 1, 300)
 var totalScheduled = AtomicInteger(0)
 
+val gson = GsonBuilder()
+    .setPrettyPrinting()
+    .create()
+
+lateinit var jsonWriter: JsonWriter
+
 fun main(args0: Array<String>) {
     val args = if (devMode) arrayOf(
-        "/Users/jetbrains/kotlin/dist",
-        "/Users/jetbrains/tasks/dist",
+//        "/Users/jetbrains/kotlin/dist",
+//        "/Users/jetbrains/tasks/dist",
+        "/Users/jetbrains/sandbox/a/repo",
+        "/Users/jetbrains/sandbox/b/repo",
         "/Users/jetbrains/dist-compare/js/dist"
     ) else args0
 
@@ -59,29 +69,32 @@ fun main(args0: Array<String>) {
 
     if (!devMode) copyHtmlApp()
 
+    jsonWriter = gson.newJsonWriter(diffDir.resolve("data.json").writer())
+    jsonWriter.beginArray()
+
     Item("", "root")
-        .visit(manager.resolveFile(expected, ""), manager.resolveFile(actual, ""))
+        .visit(
+            manager.resolveFile(expected, ""),
+            manager.resolveFile(actual, "")
+        )
 
     progressBar.maxHint(totalScheduled.get().toLong())
-    pool.shutdown()
-    pool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
+    cpuExecutor.shutdown()
+    cpuExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
 
-    printTotals()
+    ioExecutor.shutdown()
+    ioExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
 
-    if (writeFiles) {
-        diffDir.mkdirs()
-        diffDir.resolve("data.json").writer().use {
-            GsonBuilder()
-                .setPrettyPrinting()
-                .create()
-                .toJson(items, it)
-        }
-    }
+    jsonWriter.endArray()
+    jsonWriter.close()
 
+    progressBar.stepTo(totalScheduled.get().toLong())
+    setProgressMessage("$lastId files, ${itemsByDigest.size} unique")
     progressBar.stop()
 
     if (!devMode) {
-        println("http://localhost:8000")
+        println("Opening http://localhost:8000")
+
         val server = HttpServer.create(InetSocketAddress(8000), 0)
         server.createContext("/", HttpServerHandler())
         server.executor = null

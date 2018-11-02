@@ -4,7 +4,9 @@ import com.github.difflib.DiffUtils
 import com.github.difflib.UnifiedDiffUtils
 import org.apache.commons.vfs2.FileObject
 import org.jetbrains.distcmp.utils.classToTxt
-import org.jetbrains.distcmp.utils.textFileTypes
+import org.jetbrains.distcmp.utils.isBadExt
+import org.jetbrains.distcmp.utils.kind
+import org.jetbrains.distcmp.utils.md5
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 
@@ -12,7 +14,7 @@ class Item(val relativePath: String, ext: String) {
     val id = lastId.incrementAndGet()
 
     // heruistic to detect files without extenstion
-    val badExt = ext.isBlank() || (ext.any { it.isUpperCase() } && ext.any { it.isLowerCase() })
+    val badExt = isBadExt(ext)
     val ext = if (badExt) "" else ext
     var diffsCount = 0
 
@@ -24,10 +26,9 @@ class Item(val relativePath: String, ext: String) {
                 manager.createFileSystem(actual).children.toList()
             )
             else -> {
-                pool.submit {
+                cpuExecutor.submit {
                     matchItems(expected, actual)
                 }
-
                 totalScheduled.incrementAndGet()
             }
         }
@@ -40,43 +41,53 @@ class Item(val relativePath: String, ext: String) {
         val actualChildrenByName = actualChildren.associateBy { it.name.baseName }
         val actualVisited = mutableSetOf<String>()
 
-        expectedChildren.forEach { aChild ->
-            val name = aChild.name.baseName
-            val bChild = actualChildrenByName[name]
-            val child = child(name, aChild.name.extension)
-            if (bChild == null) {
-                child.reportMismatch(FileStatus.MISSED, FileKind.TEXT)
-            } else {
+        expectedChildren.forEach { expected ->
+            val name = expected.name.baseName
+            val actual = actualChildrenByName[name]
+            val childItem = child(name, expected.name.extension)
+            if (actual == null) childItem.visitUnpaired(expected, FileStatus.MISSED)
+            else {
                 actualVisited.add(name)
-                child.visit(aChild, bChild)
+                childItem.visit(expected, actual)
             }
         }
 
         actualChildren.forEach {
             val name = it.name.baseName
             if (name !in actualVisited) {
-                child(name, it.name.extension).reportMismatch(
-                    FileStatus.UNEXPECTED,
-                    FileKind.TEXT
-                )
+                child(name, it.name.extension).visitUnpaired(it, FileStatus.UNEXPECTED)
+            }
+        }
+    }
+
+    private fun visitUnpaired(
+        expected: FileObject,
+        status: FileStatus
+    ) {
+        val fileKind = expected.kind
+        when (fileKind) {
+            FileKind.DIR -> reportMismatch(status, FileKind.DIR)
+            else -> {
+                cpuExecutor.submit {
+                    if (isAlreadyAnalyzed(expected.md5())) reportCopy(fileKind)
+                    else reportMismatch(status, fileKind)
+                }
+                totalScheduled.incrementAndGet()
             }
         }
     }
 
     private fun matchItems(expected: FileObject, actual: FileObject) {
-        val extension = expected.name.extension.toLowerCase()
-
-        when {
-            extension == "class" -> matchClass(expected, actual)
-            isTextFile(extension) -> matchText(expected, actual)
-            else -> matchBin(expected, actual)
+        when (expected.kind) {
+            FileKind.CLASS -> matchClass(expected, actual)
+            FileKind.TEXT -> matchText(expected, actual)
+            FileKind.BIN -> matchBin(expected, actual)
+            FileKind.DIR -> error("should not be directory")
         }
 
         setProgressMessage(relativePath)
         progressBar.step()
     }
-
-    private fun isTextFile(extension: String) = extension.toLowerCase() in textFileTypes || badExt
 
     private fun matchClass(expected: FileObject, actual: FileObject) {
         val expectedTxt = expected.content.inputStream.bufferedReader().readText()
@@ -156,9 +167,12 @@ class Item(val relativePath: String, ext: String) {
         val md5 = MessageDigest.getInstance("MD5")
         md5.update(expectedTxt.toByteArray())
         md5.update(actualTxt.toByteArray())
-        val digest = ByteBuffer.wrap(md5.digest())
+        return isAlreadyAnalyzed(md5)
+    }
 
-        return itemsByDigest.getOrPut(digest) { this } !== this
+    private fun isAlreadyAnalyzed(md5: MessageDigest): Boolean {
+        val digest = ByteBuffer.wrap(md5.digest())
+        return itemsByDigest.getOrPut(digest) { id } != id
     }
 
     private fun classToText(expected: FileObject): String {
@@ -171,7 +185,5 @@ class Item(val relativePath: String, ext: String) {
         return txt.lines().drop(3).joinToString("\n")
     }
 
-    private fun child(name: String, ext: String) = Item("$relativePath/$name", ext).also {
-        setProgressMessage(relativePath)
-    }
+    private fun child(name: String, ext: String) = Item("$relativePath/$name", ext)
 }

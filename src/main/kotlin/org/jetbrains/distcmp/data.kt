@@ -18,5 +18,5 @@ enum class FileStatus {
 }
 
 enum class FileKind {
-    CLASS, TEXT, BIN
+    CLASS, TEXT, BIN, DIR
 }

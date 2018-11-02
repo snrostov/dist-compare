@@ -5,21 +5,16 @@ import java.io.File
 import java.io.PrintWriter
 import java.nio.ByteBuffer
 import java.security.MessageDigest
-import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 val lastId = AtomicInteger()
-val items = mutableListOf<FileInfo>()
-val itemsByDigest = ConcurrentHashMap<ByteBuffer, Item>()
-val itemsByStatus = TreeMap<String, MutableList<Item>>()
+val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
 
 val patchDigest = ConcurrentHashMap<ByteBuffer, Int>()
 val patchId = AtomicInteger()
 
-fun deltasDigests(
-    deltas: MutableList<Delta<String>>
-): List<Int> {
+fun deltasDigests(deltas: MutableList<Delta<String>>): List<Int> {
     return deltas.mapTo(mutableSetOf()) {
         val md5 = MessageDigest.getInstance("MD5")
         it.original.lines.forEach {
@@ -33,102 +28,47 @@ fun deltasDigests(
     }.toList()
 }
 
-fun Item.reportMatch(fileKind: FileKind) {
-    synchronized(itemsByStatus) {
-        itemsByStatus.getOrPut("TOTAL.MATCHED") { mutableListOf() }.add(this)
-    }
+fun Item.toInfo(fileKind: FileKind, fileStatus: FileStatus, diffs: Int) =
+    FileInfo(id, relativePath, badExt, ext, fileStatus, fileKind, false, diffs)
 
-    synchronized(items) {
-        items.add(
-            FileInfo(
-                id,
-                relativePath,
-                badExt,
-                ext,
-                FileStatus.MATCHED,
-                fileKind,
-                false,
-                0
-            )
-        )
+private fun writeItem(item: FileInfo) {
+    ioExecutor.submit {
+        gson.toJson(item, item.javaClass, jsonWriter)
     }
+}
+
+fun Item.reportMatch(fileKind: FileKind) {
+    val item = toInfo(fileKind, FileStatus.MATCHED, 0)
+    writeItem(item)
 }
 
 fun Item.reportCopy(fileKind: FileKind) {
-    synchronized(itemsByStatus) {
-        itemsByStatus.getOrPut("COPY") { mutableListOf() }.add(this)
-    }
-
-    synchronized(items) {
-        items.add(
-            FileInfo(
-                id,
-                relativePath,
-                badExt,
-                ext,
-                FileStatus.COPY,
-                fileKind,
-                false,
-                0
-            )
-        )
-    }
+    val item = toInfo(fileKind, FileStatus.COPY, 0)
+    writeItem(item)
 }
 
 fun Item.reportMismatch(
-    mismatchExt: FileStatus,
+    status: FileStatus,
     fileKind: FileKind,
     writeDiff: Boolean = false,
     outputWriter: (PrintWriter.(FileInfo) -> Unit)? = null
 ) {
-    val kind = if (badExt) "OTHER.$mismatchExt" else "$ext.$mismatchExt"
-    val item =
-        FileInfo(id, relativePath, badExt, ext, mismatchExt, fileKind, false, diffsCount)
+    val item = toInfo(fileKind, status, diffsCount)
 
-    synchronized(itemsByStatus) {
-        itemsByStatus.getOrPut(kind) { mutableListOf() }.add(this)
-        itemsByStatus.getOrPut("TOTAL.$mismatchExt") { mutableListOf() }.add(this)
-    }
-
-    synchronized(items) {
-        items.add(item)
-    }
-
-    if (outputWriter != null && writeDiff && writeFiles) {
-        val reportFile =
-            File("${diffDir.path}/$relativePath.patch")
-        reportFile.parentFile.mkdirs()
-        reportFile.printWriter().use {
-            outputWriter(it, item)
+    if (outputWriter != null && writeDiff) {
+        ioExecutor.submit {
+            val reportFile =
+                File("${diffDir.path}/$relativePath.patch")
+            reportFile.parentFile.mkdirs()
+            reportFile.printWriter().use {
+                outputWriter(it, item)
+            }
         }
     }
+
+    writeItem(item)
 }
 
 fun printTotals() {
-    println("total: ${items.size}")
-
-    itemsByStatus
-        .toList()
-        .sortedByDescending { it.second.size }
-        .take(10).forEach { (type, list) ->
-            val diffs = list.sumBy { it.diffsCount }
-            if (diffs > 0) {
-                println("$type: ${list.size} items / $diffs diffs")
-            } else {
-                println("$type: ${list.size} items")
-            }
-        }
-
-    val deltaUsages = mutableMapOf<Int, Int>()
-
-    items.forEach {
-        it.deltas.forEach {
-            deltaUsages[it] = deltaUsages.getOrDefault(it, 0) + 1
-        }
-    }
-
-    println("Top mismatches (10 of ${deltaUsages.size}):")
-    deltaUsages.entries.sortedByDescending { it.value }.take(10).forEach { (id, count) ->
-        println("- $id ($count)")
-    }
+    println("total: ${lastId}")
 }

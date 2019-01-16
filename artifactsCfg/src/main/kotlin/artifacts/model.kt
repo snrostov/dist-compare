@@ -2,7 +2,8 @@ package artifacts
 
 import java.io.File
 
-class Module(val root: File, val name: String = root.name) {
+class Module(val root: File, val name: String = root.name, val isLib: Boolean) {
+    val contents = mutableListOf<String>()
     override fun toString(): String = name
 }
 

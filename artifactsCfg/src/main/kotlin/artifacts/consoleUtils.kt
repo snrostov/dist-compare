@@ -2,7 +2,7 @@ package artifacts
 
 
 fun warn(s: String) {
-    println(s)
+    println("! $s")
 }
 
 inline fun progress(name: String, x: () -> Unit) {

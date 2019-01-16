@@ -12,7 +12,7 @@ class Index {
         outputRoot.listFiles().forEach {
             if (it.isDirectory) {
                 progress("scanning module output: $it") {
-                    scanModuleOutput(Module(it))
+                    scanModuleOutput(Module(it, isLib = false))
                 }
             } else {
                 warn("$it ignored")
@@ -33,6 +33,7 @@ class Index {
 
     private fun add(path: String, item: CompileOutput) {
         byPath.getOrPut(path) { mutableListOf() }.add(item)
+        item.module.contents.add(path)
 
         if (path.startsWith("org/jetbrains/kotlin")) {
             add(path.replace("org/jetbrains/kotlin", "kotlin/reflect/jvm/internal/impl"), item)
@@ -42,7 +43,7 @@ class Index {
     fun scanJar(jar: File) {
         jars.add(jar.canonicalFile)
 
-        val module = Module(jar)
+        val module = Module(jar, isLib = true)
         progress("scanning jar: $jar") {
             ZipFile(jar).entries().asSequence().forEach {
                 val fileName = it.name

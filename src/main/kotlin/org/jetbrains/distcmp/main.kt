@@ -35,10 +35,10 @@ lateinit var jsonWriter: JsonWriter
 
 fun main(args0: Array<String>) {
     val args = if (devMode) arrayOf(
-//        "/Users/jetbrains/kotlin/dist",
-//        "/Users/jetbrains/tasks/dist",
-        "/Users/jetbrains/sandbox/a/repo",
-        "/Users/jetbrains/sandbox/b/repo",
+        "/Users/jetbrains/kotlin/dist",
+        "/Users/jetbrains/tasks/dist",
+//        "/Users/jetbrains/sandbox/a/repo",
+//        "/Users/jetbrains/sandbox/b/repo",
         "/Users/jetbrains/dist-compare/js/dist"
     ) else args0
 

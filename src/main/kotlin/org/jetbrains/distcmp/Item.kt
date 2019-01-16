@@ -140,25 +140,29 @@ class Item(val relativePath: String, ext: String) {
         else reportMismatch(FileStatus.MISMATCHED, fileKind, true) {
             val lines = expectedTxt.lines()
 
-            val patches = DiffUtils.diff(lines, actualTxt.lines())
-            val deltas = patches.deltas
-            diffsCount = deltas.size
-            it.deltas = deltasDigests(deltas)
-            val diff = UnifiedDiffUtils.generateUnifiedDiff(
-                expected.url.toString(),
-                actual.url.toString(),
-                lines,
-                patches,
-                5
-            )
+            if (lines.size > 10000) {
+                println("File too large (${lines.size} lines > 10000)")
+            } else {
+                val patches = DiffUtils.diff(lines, actualTxt.lines())
+                val deltas = patches.deltas
+                diffsCount = deltas.size
+                it.deltas = deltasDigests(deltas)
+                val diff = UnifiedDiffUtils.generateUnifiedDiff(
+                    expected.url.toString(),
+                    actual.url.toString(),
+                    lines,
+                    patches,
+                    5
+                )
 
-            val limit = 1000
-            diff.asSequence().take(limit).forEach {
-                println(it)
-            }
+                val limit = 1000
+                diff.asSequence().take(limit).forEach {
+                    println(it)
+                }
 
-            if (diff.size > limit) {
-                println("And more ${diff - limit}...")
+                if (diff.size > limit) {
+                    println("And more ${diff - limit}...")
+                }
             }
         }
     }

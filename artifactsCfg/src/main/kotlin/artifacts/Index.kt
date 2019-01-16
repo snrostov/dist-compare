@@ -33,6 +33,10 @@ class Index {
 
     private fun add(path: String, item: CompileOutput) {
         byPath.getOrPut(path) { mutableListOf() }.add(item)
+
+        if (path.startsWith("org/jetbrains/kotlin")) {
+            add(path.replace("org/jetbrains/kotlin", "kotlin/reflect/jvm/internal/impl"), item)
+        }
     }
 
     fun scanJar(jar: File) {
@@ -51,14 +55,17 @@ class Index {
         configs.listFiles().forEach {
             when {
                 it.isDirectory -> scanLibConfigs(it)
-                it.name.endsWith(".xml") -> scanLibConfig(it)
+                it.name.endsWith(".xml") || it.name.endsWith(".iml") -> scanLibConfig(it)
             }
         }
     }
 
     fun scanLibConfig(xmlFile: File) {
+//        println("XML $xmlFile")
         val document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(xmlFile)
         document.getElementsByTagName("library").forEach { lib ->
+            val name = lib.attributes["name"]
+
             lib.childNodes.forEach { libEl ->
                 if (libEl.nodeName.toLowerCase() == "classes") {
                     libEl.childNodes.forEach { classes ->
@@ -76,7 +83,7 @@ class Index {
                                         val file = File(filePath).canonicalFile
 
                                         if (file.exists()) scanJar(file)
-                                        else warn("cannot find: $file")
+                                        else warn("cannot find: $file (referenced in $xmlFile)")
                                     } else warn("only jar root dirs supported")
                                 } else warn("unsupported protocol: $url")
                             }

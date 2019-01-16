@@ -22,6 +22,7 @@ fun printIndex(index: Index) {
 fun makeKeg(index: Index) {
     var totalSize = 0L
     index.jars.forEach {
+//        println("JAR $it")
         totalSize += it.length()
         val dest = File("jars/${it.name}")
         if (!dest.exists()) {

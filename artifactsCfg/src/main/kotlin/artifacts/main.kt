@@ -9,7 +9,8 @@ import java.util.zip.ZipFile
 
 val notFound = mutableSetOf<String>()
 val home = System.getProperty("user.home")
-val jpsProject = File("/Users/jetbrains/kotlin")
+//val jpsProject = File("/Users/jetbrains/kotlin")
+val jpsProject = File("/Users/jetbrains/tasks/kwjps/wjps")
 val gradleProject =  File("/Users/jetbrains/tasks/kwjps/wgradle")
 
 fun main() {

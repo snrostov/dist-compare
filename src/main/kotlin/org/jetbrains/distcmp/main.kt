@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 val devMode = System.getProperty("dev") != null
+val runFrontend = true //!devMode
 lateinit var reportDir: File
 lateinit var diffDir: File
 
@@ -35,11 +36,9 @@ lateinit var jsonWriter: JsonWriter
 
 fun main(args0: Array<String>) {
     val args = if (devMode) arrayOf(
-//        "/Users/jetbrains/kotlin/dist",
-//        "/Users/jetbrains/tasks/dist",
-        "/Users/jetbrains/sandbox/a/repo",
-        "/Users/jetbrains/sandbox/b/repo",
-        "/Users/jetbrains/dist-compare/js/dist"
+        "/Users/jetbrains/tasks/kwjps/sandbox/wgradle/dist",
+        "/Users/jetbrains/tasks/kwjps/sandbox/jps/dist",
+        "/Users/jetbrains/tasks/kwjps/sandbox/report"
     ) else args0
 
     if (args.size !in 2..3) {
@@ -49,9 +48,10 @@ fun main(args0: Array<String>) {
 
     val expected = File(args[0])
     val actual = File(args[1])
+    val explicitReportDir = args.size == 3
     reportDir =
-            if (args.size == 3) File(args[2])
-            else Files.createTempDirectory("dist-compare").toFile()
+        if (explicitReportDir) File(args[2])
+        else Files.createTempDirectory("dist-compare").toFile()
 
     println("Comparing `$expected` vs `$actual` to `$reportDir`")
 
@@ -62,12 +62,12 @@ fun main(args0: Array<String>) {
     progressBar.maxHint(-1)
     progressBar.start()
 
+    if (explicitReportDir) removePreviousReport()
+
     diffDir = reportDir.resolve("diff")
     diffDir.mkdir()
 
-    removePreviousReport()
-
-    if (!devMode) copyHtmlApp()
+    if (runFrontend) copyHtmlApp()
 
     jsonWriter = gson.newJsonWriter(diffDir.resolve("data.json").writer())
     jsonWriter.beginArray()
@@ -89,10 +89,10 @@ fun main(args0: Array<String>) {
     jsonWriter.close()
 
     progressBar.stepTo(totalScheduled.get().toLong())
-    setProgressMessage("$lastId files, ${itemsByDigest.size} unique")
+    setProgressMessage("$lastId files, ${itemsByDigest.size} unique, $diffs diffs ($abortedDiffs aborted)")
     progressBar.stop()
 
-    if (!devMode) {
+    if (runFrontend) {
         println("Opening http://localhost:8000")
 
         val server = HttpServer.create(InetSocketAddress(8000), 0)
@@ -108,13 +108,8 @@ fun main(args0: Array<String>) {
 
 private fun removePreviousReport() {
     setProgressMessage("Removing previous report")
-    if (devMode) {
-        diffDir.deleteRecursively()
-        diffDir.mkdirs()
-    } else {
-        reportDir.deleteRecursively()
-        reportDir.mkdirs()
-    }
+    reportDir.deleteRecursively()
+    reportDir.mkdirs()
 }
 
 private fun copyHtmlApp() {

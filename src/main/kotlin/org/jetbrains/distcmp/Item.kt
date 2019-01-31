@@ -2,6 +2,7 @@ package org.jetbrains.distcmp
 
 import com.github.difflib.DiffUtils
 import com.github.difflib.UnifiedDiffUtils
+import com.github.difflib.algorithm.myers.MyersDiff
 import org.apache.commons.vfs2.FileObject
 import org.jetbrains.distcmp.utils.classToTxt
 import org.jetbrains.distcmp.utils.isBadExt
@@ -18,44 +19,49 @@ class Item(val relativePath: String, ext: String) {
     val ext = if (badExt) "" else ext
     var diffsCount = 0
 
-    fun visit(expected: FileObject, actual: FileObject) {
+    fun visit(expected: FileObject?, actual: FileObject?) {
+        require(expected != null || actual != null)
+        val expectedOrActual = expected ?: actual!!
+
         when {
-            expected.isFolder -> visitDirectory(expected.children.toList(), actual.children.toList())
-            manager.canCreateFileSystem(expected) -> visitDirectory(
+            expectedOrActual.isFolder -> visitDirectory(expected?.children?.toList(), actual?.children?.toList())
+            manager.canCreateFileSystem(expectedOrActual) -> visitDirectory(
                 manager.createFileSystem(expected).children.toList(),
                 manager.createFileSystem(actual).children.toList()
             )
             else -> {
-                cpuExecutor.submit {
-                    matchItems(expected, actual)
-                }
+                matchItems(expected, actual)
+
                 totalScheduled.incrementAndGet()
             }
         }
     }
 
     private fun visitDirectory(
-        expectedChildren: List<FileObject>,
-        actualChildren: List<FileObject>
+        expectedChildren: List<FileObject>?,
+        actualChildren: List<FileObject>?
     ) {
-        val actualChildrenByName = actualChildren.associateBy { it.name.baseName }
+        require(expectedChildren != null || actualChildren != null)
+
+        val actualChildrenByName = actualChildren?.associateBy { it.name.baseName }
         val actualVisited = mutableSetOf<String>()
 
-        expectedChildren.forEach { expected ->
+        expectedChildren?.forEach { expected ->
             val name = expected.name.baseName
-            val actual = actualChildrenByName[name]
+            val actual = actualChildrenByName?.get(name)
             val childItem = child(name, expected.name.extension)
             if (actual == null) childItem.visitUnpaired(expected, FileStatus.MISSED)
-            else {
-                actualVisited.add(name)
-                childItem.visit(expected, actual)
-            }
+            else actualVisited.add(name)
+
+            childItem.visit(expected, actual)
         }
 
-        actualChildren.forEach {
-            val name = it.name.baseName
+        actualChildren?.forEach { actual ->
+            val name = actual.name.baseName
             if (name !in actualVisited) {
-                child(name, it.name.extension).visitUnpaired(it, FileStatus.UNEXPECTED)
+                val childItem = child(name, actual.name.extension)
+                childItem.visitUnpaired(actual, FileStatus.UNEXPECTED)
+                childItem.visit(null, actual)
             }
         }
     }
@@ -77,16 +83,26 @@ class Item(val relativePath: String, ext: String) {
         }
     }
 
-    private fun matchItems(expected: FileObject, actual: FileObject) {
-        when (expected.kind) {
-            FileKind.CLASS -> matchClass(expected, actual)
-            FileKind.TEXT -> matchText(expected, actual)
-            FileKind.BIN -> matchBin(expected, actual)
-            FileKind.DIR -> error("should not be directory")
+    private fun matchItems(expected: FileObject?, actual: FileObject?) {
+        if (expected == null) {
+            visitUnpaired(actual!!, FileStatus.MISSED)
+            return
+        } else if (actual == null) {
+            visitUnpaired(expected, FileStatus.MISSED)
+            return
         }
 
-        setProgressMessage(relativePath)
-        progressBar.step()
+        cpuExecutor.submit {
+            when (expected.kind) {
+                FileKind.CLASS -> matchClass(expected, actual)
+                FileKind.TEXT -> matchText(expected, actual)
+                FileKind.BIN -> matchBin(expected, actual)
+                FileKind.DIR -> error("should not be directory")
+            }
+
+            setProgressMessage(relativePath)
+            progressBar.step()
+        }
     }
 
     private fun matchClass(expected: FileObject, actual: FileObject) {
@@ -129,6 +145,12 @@ class Item(val relativePath: String, ext: String) {
         }
     }
 
+    val maxComparsions = 1000000 // 1 sec
+
+    class TooManyComparsions : Exception() {
+        override fun fillInStackTrace(): Throwable = this
+    }
+
     private fun matchText(
         fileKind: FileKind,
         expectedTxt: String,
@@ -137,29 +159,59 @@ class Item(val relativePath: String, ext: String) {
         actual: FileObject
     ) {
         if (expectedTxt == actualTxt) reportMatch(fileKind)
-        else reportMismatch(FileStatus.MISMATCHED, fileKind, true) {
+        else {
+            reportMismatch(FileStatus.MISMATCHED, fileKind)
+
             val lines = expectedTxt.lines()
+            if (lines.size > maxComparsions) {
+                writeDiff {
+                    println("File too large (${lines.size} lines > 10000)")
+                }
+            } else {
+                diffs.incrementAndGet()
+                cpuExecutor.submit {
+                    var i = 0
+                    try {
+                        val patches = DiffUtils.diff<String>(lines, actualTxt.lines(), MyersDiff<String> { a, b ->
+                            if (i++ > maxComparsions) throw TooManyComparsions()
+                            a == b
+                        })
 
-            val patches = DiffUtils.diff(lines, actualTxt.lines())
-            val deltas = patches.deltas
-            diffsCount = deltas.size
-            it.deltas = deltasDigests(deltas)
-            val diff = UnifiedDiffUtils.generateUnifiedDiff(
-                expected.url.toString(),
-                actual.url.toString(),
-                lines,
-                patches,
-                5
-            )
+                        val deltas = patches.deltas
+                        diffsCount = deltas.size
+                        val diff = UnifiedDiffUtils.generateUnifiedDiff(
+                            expected.url.toString(),
+                            actual.url.toString(),
+                            lines,
+                            patches,
+                            5
+                        )
 
-            val limit = 1000
-            diff.asSequence().take(limit).forEach {
-                println(it)
+                        val limit = 1000
+                        writeDiff {
+                            diff.asSequence().take(limit).forEach {
+                                println(it)
+                            }
+
+                            if (diff.size > limit) {
+                                println("And more ${diff - limit}...")
+                            }
+                        }
+                    } catch (e: TooManyComparsions) {
+                        abortedDiffs.incrementAndGet()
+                        writeDiff {
+                            println(
+                                "[DIFF-ABORTED] Building diff takes too long ($i comparsions). " +
+                                        "Please see origin files " +
+                                        "(saved below with extensions .a.expected.txt and .b.actual.txt)"
+                            )
+                        }
+                        writeDiff("a.expected.txt") { print(expectedTxt) }
+                        writeDiff("b.actual.txt") { print(actualTxt) }
+                    }
+                }
             }
 
-            if (diff.size > limit) {
-                println("And more ${diff - limit}...")
-            }
         }
     }
 

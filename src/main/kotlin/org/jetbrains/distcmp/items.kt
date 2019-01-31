@@ -8,6 +8,8 @@ import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
+val diffs = AtomicInteger()
+val abortedDiffs = AtomicInteger()
 val lastId = AtomicInteger()
 val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
 
@@ -51,22 +53,23 @@ fun Item.reportMismatch(
     status: FileStatus,
     fileKind: FileKind,
     writeDiff: Boolean = false,
-    outputWriter: (PrintWriter.(FileInfo) -> Unit)? = null
+    outputWriter: (PrintWriter.() -> Unit)? = null
 ) {
     val item = toInfo(fileKind, status, diffsCount)
+    writeItem(item)
+}
 
-    if (outputWriter != null && writeDiff) {
-        ioExecutor.submit {
-            val reportFile =
-                File("${diffDir.path}/$relativePath.patch")
-            reportFile.parentFile.mkdirs()
-            reportFile.printWriter().use {
-                outputWriter(it, item)
-            }
+fun Item.writeDiff(ext: String = "patch", outputWriter: (PrintWriter.() -> Unit)? = null) {
+    if (outputWriter == null) return
+
+    ioExecutor.submit {
+        val reportFile =
+            File("${diffDir.path}/$relativePath.$ext")
+        reportFile.parentFile.mkdirs()
+        reportFile.printWriter().use {
+            outputWriter(it)
         }
     }
-
-    writeItem(item)
 }
 
 fun printTotals() {

@@ -73,6 +73,7 @@ export class DataStore {
             }
 
             parent.leaf = item;
+            parent.item = item;
         }
 
         const fieldValuesList: FieldValues[] = [];
@@ -81,6 +82,7 @@ export class DataStore {
             return fieldValuesList.push(value);
         });
 
+        rootNode.markUnpaired(false);
         rootNode.collapseSingleChild();
         rootNode.addCounts();
 
@@ -127,6 +129,8 @@ export class Node /*implements FancytreeNode*/ {
     diffs: number = 0;
     count: number = 0;
     leaf: Item;
+    item: Item;
+    unpaired: boolean = false;
 
     constructor(title: String) {
         this.title = title;
@@ -176,6 +180,19 @@ export class Node /*implements FancytreeNode*/ {
 
         for (let child of this._children) {
             child.addCounts()
+        }
+    }
+
+    markUnpaired(parentUnpaired: boolean) {
+        if (parentUnpaired) {
+            this.title = "<span class='unpaired'>" + this.title + "</span>"
+        }
+
+        this.unpaired = parentUnpaired
+            || (this.item != null && (this.item.status == "MISSED" || this.item.status == "UNEXPECTED"));
+
+        for (let child of this._children) {
+            child.markUnpaired(this.unpaired)
         }
     }
 }

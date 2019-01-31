@@ -118,7 +118,17 @@ private fun copyHtmlApp() {
         "app.js",
         "index.html"
     ).forEach {
-        Files.copy(Item::class.java.getResourceAsStream("js/$it"), File(reportDir, it).toPath())
+        if (devMode) {
+            Files.copy(
+                File("js/dist/$it").toPath(),
+                File(reportDir, it).toPath()
+            )
+        } else {
+            Files.copy(
+                Item::class.java.getResourceAsStream("js/$it"),
+                File(reportDir, it).toPath()
+            )
+        }
     }
 }
 

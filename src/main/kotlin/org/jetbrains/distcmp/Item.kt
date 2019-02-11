@@ -24,16 +24,15 @@ class Item(val relativePath: String, ext: String) {
         val expectedOrActual = expected ?: actual!!
 
         when {
-            expectedOrActual.isFolder -> visitDirectory(expected?.children?.toList(), actual?.children?.toList())
+            expectedOrActual.isFolder -> visitDirectory(
+                expected?.children?.toList(),
+                actual?.children?.toList()
+            )
             manager.canCreateFileSystem(expectedOrActual) -> visitDirectory(
                 manager.createFileSystem(expected).children.toList(),
                 manager.createFileSystem(actual).children.toList()
             )
-            else -> {
-                matchItems(expected, actual)
-
-                totalScheduled.incrementAndGet()
-            }
+            else -> visitFile(expected, actual)
         }
     }
 
@@ -43,65 +42,53 @@ class Item(val relativePath: String, ext: String) {
     ) {
         require(expectedChildren != null || actualChildren != null)
 
-        val actualChildrenByName = actualChildren?.associateBy { it.name.baseName }
-        val actualVisited = mutableSetOf<String>()
+        if (expectedChildren == null) reportMismatch(FileStatus.UNEXPECTED, FileKind.DIR)
+        else if (actualChildren == null) reportMismatch(FileStatus.MISSED, FileKind.DIR)
 
+        val actualChildrenByName = actualChildren?.associateBy { it.name.baseName }
+        val expectedChildrenNames = mutableSetOf<String>()
+
+        // visit all expected items, and try to find corresponding actual
         expectedChildren?.forEach { expected ->
             val name = expected.name.baseName
-            val actual = actualChildrenByName?.get(name)
-            val childItem = child(name, expected.name.extension)
-            if (actual == null) childItem.visitUnpaired(expected, FileStatus.MISSED)
-            else actualVisited.add(name)
 
+            val actual = actualChildrenByName?.get(name)
+            if (actual != null) expectedChildrenNames.add(name)
+
+            val childItem = child(name, expected.name.extension)
             childItem.visit(expected, actual)
         }
 
+        // mark unexpected items
         actualChildren?.forEach { actual ->
             val name = actual.name.baseName
-            if (name !in actualVisited) {
+            if (name !in expectedChildrenNames) {
                 val childItem = child(name, actual.name.extension)
-                childItem.visitUnpaired(actual, FileStatus.UNEXPECTED)
                 childItem.visit(null, actual)
             }
         }
     }
 
-    private fun visitUnpaired(
-        expected: FileObject,
-        status: FileStatus
-    ) {
-        val fileKind = expected.kind
-        when (fileKind) {
-            FileKind.DIR -> reportMismatch(status, FileKind.DIR)
-            else -> {
-                cpuExecutor.submit {
-                    if (isAlreadyAnalyzed(expected.md5())) reportCopy(fileKind)
-                    else reportMismatch(status, fileKind)
+    private fun visitFile(expected: FileObject?, actual: FileObject?) {
+        when {
+            expected == null -> visitUnpaired(actual!!, FileStatus.UNEXPECTED)
+            actual == null -> visitUnpaired(expected, FileStatus.MISSED)
+            else -> WorkManager.submit(relativePath) {
+                when (expected.kind) {
+                    FileKind.CLASS -> matchClass(expected, actual)
+                    FileKind.TEXT -> matchText(expected, actual)
+                    FileKind.BIN -> matchBin(expected, actual)
+                    FileKind.DIR -> error("should not be directory")
                 }
-                totalScheduled.incrementAndGet()
             }
         }
     }
 
-    private fun matchItems(expected: FileObject?, actual: FileObject?) {
-        if (expected == null) {
-            visitUnpaired(actual!!, FileStatus.MISSED)
-            return
-        } else if (actual == null) {
-            visitUnpaired(expected, FileStatus.MISSED)
-            return
-        }
-
-        cpuExecutor.submit {
-            when (expected.kind) {
-                FileKind.CLASS -> matchClass(expected, actual)
-                FileKind.TEXT -> matchText(expected, actual)
-                FileKind.BIN -> matchBin(expected, actual)
-                FileKind.DIR -> error("should not be directory")
-            }
-
-            setProgressMessage(relativePath)
-            progressBar.step()
+    private fun visitUnpaired(existed: FileObject, status: FileStatus) {
+        // check for copy (requires files content, so submit it in queue)
+        WorkManager.submit(relativePath) {
+            if (isAlreadyAnalyzed(existed.md5())) reportCopy(existed.kind)
+            else reportMismatch(status, existed.kind)
         }
     }
 
@@ -169,7 +156,7 @@ class Item(val relativePath: String, ext: String) {
                 }
             } else {
                 diffs.incrementAndGet()
-                cpuExecutor.submit {
+                WorkManager.submit(relativePath) {
                     var i = 0
                     try {
                         val patches = DiffUtils.diff<String>(lines, actualTxt.lines(), MyersDiff<String> { a, b ->
@@ -211,7 +198,6 @@ class Item(val relativePath: String, ext: String) {
                     }
                 }
             }
-
         }
     }
 

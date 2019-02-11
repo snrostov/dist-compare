@@ -34,7 +34,7 @@ fun Item.toInfo(fileKind: FileKind, fileStatus: FileStatus, diffs: Int) =
     FileInfo(id, relativePath, badExt, ext, fileStatus, fileKind, false, diffs)
 
 private fun writeItem(item: FileInfo) {
-    ioExecutor.submit {
+    WorkManager.io {
         gson.toJson(item, item.javaClass, jsonWriter)
     }
 }
@@ -51,9 +51,7 @@ fun Item.reportCopy(fileKind: FileKind) {
 
 fun Item.reportMismatch(
     status: FileStatus,
-    fileKind: FileKind,
-    writeDiff: Boolean = false,
-    outputWriter: (PrintWriter.() -> Unit)? = null
+    fileKind: FileKind
 ) {
     val item = toInfo(fileKind, status, diffsCount)
     writeItem(item)
@@ -62,7 +60,7 @@ fun Item.reportMismatch(
 fun Item.writeDiff(ext: String = "patch", outputWriter: (PrintWriter.() -> Unit)? = null) {
     if (outputWriter == null) return
 
-    ioExecutor.submit {
+    WorkManager.io {
         val reportFile =
             File("${diffDir.path}/$relativePath.$ext")
         reportFile.parentFile.mkdirs()

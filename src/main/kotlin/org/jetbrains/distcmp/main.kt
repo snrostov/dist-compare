@@ -21,12 +21,8 @@ val runFrontend = true //!devMode
 lateinit var reportDir: File
 lateinit var diffDir: File
 
-val cpuExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
-val ioExecutor = Executors.newSingleThreadExecutor()
 
 val manager = VFS.getManager()
-val progressBar = ProgressBar("", 1, 300)
-var totalScheduled = AtomicInteger(0)
 
 val gson = GsonBuilder()
     .setPrettyPrinting()
@@ -36,9 +32,8 @@ lateinit var jsonWriter: JsonWriter
 
 fun main(args0: Array<String>) {
     val args = if (devMode) arrayOf(
-        "/Users/jetbrains/tasks/kwjps/sandbox/wgradle/dist",
-        "/Users/jetbrains/tasks/kwjps/sandbox/jps/dist",
-        "/Users/jetbrains/tasks/kwjps/sandbox/report"
+        "/Users/jetbrains/tasks/kwjps/wgradle/dist",
+        "/Users/jetbrains/tasks/kwjps/wjps/dist"
     ) else args0
 
     if (args.size !in 2..3) {
@@ -59,8 +54,7 @@ fun main(args0: Array<String>) {
     requireDir(actual)
     requireDir(reportDir)
 
-    progressBar.maxHint(-1)
-    progressBar.start()
+    WorkManager.startGathering()
 
     if (explicitReportDir) removePreviousReport()
 
@@ -78,19 +72,12 @@ fun main(args0: Array<String>) {
             manager.resolveFile(actual, "")
         )
 
-    progressBar.maxHint(totalScheduled.get().toLong())
-    cpuExecutor.shutdown()
-    cpuExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
-
-    ioExecutor.shutdown()
-    ioExecutor.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS)
+    WorkManager.waitDone()
 
     jsonWriter.endArray()
     jsonWriter.close()
 
-    progressBar.stepTo(totalScheduled.get().toLong())
-    setProgressMessage("$lastId files, ${itemsByDigest.size} unique, $diffs diffs ($abortedDiffs aborted)")
-    progressBar.stop()
+    WorkManager.reportDone()
 
     if (runFrontend) {
         println("Opening http://localhost:8000")
@@ -107,7 +94,7 @@ fun main(args0: Array<String>) {
 }
 
 private fun removePreviousReport() {
-    setProgressMessage("Removing previous report")
+    WorkManager.setProgressMessage("Removing previous report")
     reportDir.deleteRecursively()
     reportDir.mkdirs()
 }
@@ -137,9 +124,4 @@ private fun requireDir(file: File) {
         println("$file is not a directory")
         System.exit(1)
     }
-}
-
-fun setProgressMessage(msg: String) {
-    val width = TerminalFactory.get().width - 55
-    progressBar.extraMessage = msg.takeLast(width).padEnd(width)
 }

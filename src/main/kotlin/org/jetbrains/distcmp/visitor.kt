@@ -152,7 +152,7 @@ class Item(val relativePath: String, ext: String) {
             val lines = expectedTxt.lines()
             if (lines.size > maxComparsions) {
                 writeDiff {
-                    println("File too large (${lines.size} lines > 10000)")
+                    println("[DIFF-ABORTED] File too large (${lines.size} lines > 10000)")
                 }
             } else {
                 diffs.incrementAndGet()

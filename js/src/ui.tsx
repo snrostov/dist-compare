@@ -39,9 +39,13 @@ export function renderWorkspace() {
                 if (patch) {
                     const x = diff2html;
                     patch.then(text => {
-                        // noinspection UnnecessaryLocalVariableJS
-                        const diffHtml = x.getPrettyHtml(text, {outputFormat: "side-by-side"});
-                        document.getElementById("diff").innerHTML = diffHtml
+                        if (text.indexOf("[DIFF-ABORTED]") == -1) {
+                            // noinspection UnnecessaryLocalVariableJS
+                            const diffHtml = x.getPrettyHtml(text, {outputFormat: "side-by-side"});
+                            document.getElementById("diff").innerHTML = diffHtml
+                        } else {
+                            document.getElementById("diff").innerText = text;
+                        }
                     })
                 } else {
                     document.getElementById("diff").innerText = "Diff not available"

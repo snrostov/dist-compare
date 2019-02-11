@@ -82,8 +82,7 @@ fun Item.writeDiff(ext: String = "patch", outputWriter: (PrintWriter.() -> Unit)
     if (outputWriter == null) return
 
     WorkManager.io {
-        val reportFile =
-            File("${diffDir.path}/$relativePath.$ext")
+        val reportFile = File("${diffDir.path}/$relativePath.$ext")
         reportFile.parentFile.mkdirs()
         reportFile.printWriter().use {
             outputWriter(it)

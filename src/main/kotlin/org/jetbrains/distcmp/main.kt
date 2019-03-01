@@ -3,8 +3,6 @@ package org.jetbrains.distcmp
 import com.google.gson.GsonBuilder
 import com.google.gson.stream.JsonWriter
 import com.sun.net.httpserver.HttpServer
-import jline.TerminalFactory
-import me.tongfei.progressbar.ProgressBar
 import org.apache.commons.vfs2.VFS
 import org.jetbrains.distcmp.utils.HttpServerHandler
 import java.awt.Desktop
@@ -12,15 +10,20 @@ import java.io.File
 import java.net.InetSocketAddress
 import java.net.URI
 import java.nio.file.Files
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicInteger
 
 val devMode = System.getProperty("dev") != null
 val runFrontend = true //!devMode
 lateinit var reportDir: File
 lateinit var diffDir: File
 
+val runDiff = true
+val saveExpectedAndActual = !runDiff
+val saveMatchedContents = false
+val compareClassVerbose = true
+val compareClassVerboseIgnoreCompiledFrom = false
+
+val showProgress = true
+val printTeamCityMessageServices = false
 
 val manager = VFS.getManager()
 

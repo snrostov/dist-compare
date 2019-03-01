@@ -90,6 +90,14 @@ fun Item.writeDiff(ext: String = "patch", outputWriter: (PrintWriter.() -> Unit)
     }
 }
 
+fun Item.writeDiffAborted(reason: String) {
+    abortedDiffs.incrementAndGet()
+    writeDiff {
+        println("[DIFF-ABORTED] $reason")
+    }
+}
+
+
 fun printTotals() {
     println("total: ${lastId}")
 }

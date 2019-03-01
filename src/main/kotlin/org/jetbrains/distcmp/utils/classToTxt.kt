@@ -1,6 +1,7 @@
 package org.jetbrains.distcmp.utils
 
 import com.sun.tools.javap.JavapTask
+import org.jetbrains.distcmp.compareClassVerbose
 import java.io.*
 import java.net.URI
 import javax.lang.model.element.Modifier
@@ -12,7 +13,12 @@ fun shouldNotBeCalled(): Nothing = error("Should not be called")
 fun classToTxt(i: InputStream, name: String, modified: Long, uri: URI): String {
     val str = StringWriter()
     val p = JavapTask()
-    p.handleOptions(arrayOf("-v", "nothing"))
+    val options = mutableListOf<String>()
+    if (compareClassVerbose) {
+        options.add("-v")
+    }
+    options.add("nothing")
+    p.handleOptions(options.toTypedArray())
     p.setLog(str)
 
     (getFiledValue(p, "context") as com.sun.tools.javap.Context).put(

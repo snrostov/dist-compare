@@ -29,8 +29,8 @@ class Item(val relativePath: String, ext: String) {
                 actual?.children?.toList()
             )
             manager.canCreateFileSystem(expectedOrActual) -> visitDirectory(
-                manager.createFileSystem(expected).children.toList(),
-                manager.createFileSystem(actual).children.toList()
+                if (expected == null) null else manager.createFileSystem(expected).children.toList(),
+                if (actual == null) null else manager.createFileSystem(actual).children.toList()
             )
             else -> visitFile(expected, actual)
         }
@@ -73,7 +73,7 @@ class Item(val relativePath: String, ext: String) {
         when {
             expected == null -> visitUnpaired(actual!!, FileStatus.UNEXPECTED)
             actual == null -> visitUnpaired(expected, FileStatus.MISSED)
-            else -> WorkManager.submit(relativePath) {
+            else -> WorkManager.submit("READING $relativePath") {
                 when (expected.kind) {
                     FileKind.CLASS -> matchClass(expected, actual)
                     FileKind.TEXT -> matchText(expected, actual)
@@ -86,7 +86,7 @@ class Item(val relativePath: String, ext: String) {
 
     private fun visitUnpaired(existed: FileObject, status: FileStatus) {
         // check for copy (requires files content, so submit it in queue)
-        WorkManager.submit(relativePath) {
+        WorkManager.submit("READING UNPAIRED $relativePath") {
             if (isAlreadyAnalyzed(existed.md5())) reportCopy(existed.kind)
             else reportMismatch(status, existed.kind)
         }
@@ -145,56 +145,72 @@ class Item(val relativePath: String, ext: String) {
         expected: FileObject,
         actual: FileObject
     ) {
-        if (expectedTxt == actualTxt) reportMatch(fileKind)
-        else {
+        if (expectedTxt == actualTxt) {
+            reportMatch(fileKind)
+            if (saveMatchedContents) {
+                writeDiff("contents") { print(expectedTxt) }
+            }
+        } else {
             reportMismatch(FileStatus.MISMATCHED, fileKind)
 
-            val lines = expectedTxt.lines()
-            if (lines.size > maxComparsions) {
-                writeDiff {
-                    println("[DIFF-ABORTED] File too large (${lines.size} lines > 10000)")
-                }
-            } else {
-                diffs.incrementAndGet()
-                WorkManager.submit(relativePath) {
-                    var i = 0
-                    try {
-                        val patches = DiffUtils.diff<String>(lines, actualTxt.lines(), MyersDiff<String> { a, b ->
-                            if (i++ > maxComparsions) throw TooManyComparsions()
-                            a == b
-                        })
+            var expectedAndActualWasSaved = false
 
-                        val deltas = patches.deltas
-                        diffsCount = deltas.size
-                        val diff = UnifiedDiffUtils.generateUnifiedDiff(
-                            expected.url.toString(),
-                            actual.url.toString(),
-                            lines,
-                            patches,
-                            5
-                        )
+            fun ensureExpectedAndActualSaved() {
+                if (expectedAndActualWasSaved) return
+                expectedAndActualWasSaved = true
 
-                        val limit = 1000
-                        writeDiff {
-                            diff.asSequence().take(limit).forEach {
-                                println(it)
+                writeDiff("a.expected.txt") { print(expectedTxt) }
+                writeDiff("b.actual.txt") { print(actualTxt) }
+            }
+
+            if (saveExpectedAndActual) {
+                ensureExpectedAndActualSaved()
+            }
+
+            if (runDiff) {
+                val lines = expectedTxt.lines()
+                if (lines.size > 10000) {
+                    writeDiffAborted("File too large (${lines.size} lines > 10000)")
+                    ensureExpectedAndActualSaved()
+                } else {
+                    diffs.incrementAndGet()
+                    WorkManager.submit("DIFF FOR $relativePath") {
+                        var i = 0
+                        try {
+                            val patches = DiffUtils.diff<String>(lines, actualTxt.lines(), MyersDiff<String> { a, b ->
+                                if (i++ > maxComparsions) throw TooManyComparsions()
+                                a == b
+                            })
+
+                            val deltas = patches.deltas
+                            diffsCount = deltas.size
+                            val diff = UnifiedDiffUtils.generateUnifiedDiff(
+                                expected.url.toString(),
+                                actual.url.toString(),
+                                lines,
+                                patches,
+                                5
+                            )
+
+                            val limit = 1000
+                            writeDiff {
+                                diff.asSequence().take(limit).forEach {
+                                    println(it)
+                                }
+
+                                if (diff.size > limit) {
+                                    println("And more ${diff - limit}...")
+                                }
                             }
-
-                            if (diff.size > limit) {
-                                println("And more ${diff - limit}...")
-                            }
-                        }
-                    } catch (e: TooManyComparsions) {
-                        abortedDiffs.incrementAndGet()
-                        writeDiff {
-                            println(
-                                "[DIFF-ABORTED] Building diff takes too long ($i comparsions). " +
+                        } catch (e: TooManyComparsions) {
+                            writeDiffAborted(
+                                "Building diff takes too long ($i comparisons). " +
                                         "Please see origin files " +
                                         "(saved below with extensions .a.expected.txt and .b.actual.txt)"
                             )
+
+                            ensureExpectedAndActualSaved()
                         }
-                        writeDiff("a.expected.txt") { print(expectedTxt) }
-                        writeDiff("b.actual.txt") { print(actualTxt) }
                     }
                 }
             }
@@ -220,7 +236,15 @@ class Item(val relativePath: String, ext: String) {
             expected.content.lastModifiedTime,
             expected.url.toURI()
         )
-        return txt.lines().drop(3).joinToString("\n")
+
+        return if (compareClassVerbose) {
+            // remove timestamp and checksumm
+            txt.lines().drop(3).joinToString("\n")
+        } else if (compareClassVerboseIgnoreCompiledFrom) {
+            txt.lines().drop(1).joinToString("\n")
+        } else {
+            txt
+        }
     }
 
     private fun child(name: String, ext: String) = Item("$relativePath/$name", ext)

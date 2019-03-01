@@ -1,5 +1,6 @@
 package org.jetbrains.distcmp.report
 
+import org.jetbrains.distcmp.DiffContext
 import org.jetbrains.distcmp.Item
 import java.io.PrintWriter
 import java.nio.ByteBuffer
@@ -12,12 +13,16 @@ interface Reporter {
     val itemsByDigest: ConcurrentHashMap<ByteBuffer, Int>
     fun beginReport()
     fun close()
+
+    fun dir(item: Item, body: (DiffContext) -> Unit)
     fun reportMatch(item: Item, fileKind: FileKind)
     fun reportCopy(item: Item, fileKind: FileKind)
     fun reportMismatch(
         item: Item,
         status: FileStatus,
-        fileKind: FileKind
+        fileKind: FileKind,
+        expected: String? = null,
+        actual: String? = null
     )
 
     fun writeDiff(

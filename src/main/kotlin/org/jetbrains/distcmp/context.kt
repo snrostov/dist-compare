@@ -1,15 +1,14 @@
 package org.jetbrains.distcmp
 
-import org.jetbrains.distcmp.report.JsonReporter
 import org.jetbrains.distcmp.report.Reporter
 import java.io.File
 import java.nio.file.Files
 
-class DiffContext(args: Array<String>) {
-    val settings = DiffSettings(args)
-    val workManager = WorkManager(this)
-    val reporter: Reporter = JsonReporter(this)
-}
+data class DiffContext(
+    val settings: DiffSettings,
+    val workManager: WorkManager,
+    val reporter: Reporter
+)
 
 class DiffSettings(args0: Array<String>) {
     val expected: File

@@ -46,36 +46,39 @@ class Item(val relativePath: String, ext: String) {
     }
 
     private fun visitDirectory(
-        context: DiffContext,
+        parentContext: DiffContext,
         expectedChildren: List<FileObject>?,
         actualChildren: List<FileObject>?
     ) {
         require(expectedChildren != null || actualChildren != null)
 
-        val reporter = context.reporter
-        if (expectedChildren == null) reporter.reportMismatch(this@Item, FileStatus.UNEXPECTED, FileKind.DIR)
-        else if (actualChildren == null) reporter.reportMismatch(this@Item, FileStatus.MISSED, FileKind.DIR)
+        parentContext.reporter.dir(this) { context ->
+            val reporter = context.reporter
 
-        val actualChildrenByName = actualChildren?.associateBy { it.name.baseName }
-        val expectedChildrenNames = mutableSetOf<String>()
+            if (expectedChildren == null) reporter.reportMismatch(this, FileStatus.UNEXPECTED, FileKind.DIR)
+            else if (actualChildren == null) reporter.reportMismatch(this, FileStatus.MISSED, FileKind.DIR)
 
-        // visit all expected items, and try to find corresponding actual
-        expectedChildren?.forEach { expected ->
-            val name = expected.name.baseName
+            val actualChildrenByName = actualChildren?.associateBy { it.name.baseName }
+            val expectedChildrenNames = mutableSetOf<String>()
 
-            val actual = actualChildrenByName?.get(name)
-            if (actual != null) expectedChildrenNames.add(name)
+            // visit all expected items, and try to find corresponding actual
+            expectedChildren?.forEach { expected ->
+                val name = expected.name.baseName
 
-            val childItem = child(name, expected.name.extension)
-            childItem.visit(context, expected, actual)
-        }
+                val actual = actualChildrenByName?.get(name)
+                if (actual != null) expectedChildrenNames.add(name)
 
-        // mark unexpected items
-        actualChildren?.forEach { actual ->
-            val name = actual.name.baseName
-            if (name !in expectedChildrenNames) {
-                val childItem = child(name, actual.name.extension)
-                childItem.visit(context, null, actual)
+                val childItem = child(name, expected.name.extension)
+                childItem.visit(context, expected, actual)
+            }
+
+            // mark unexpected items
+            actualChildren?.forEach { actual ->
+                val name = actual.name.baseName
+                if (name !in expectedChildrenNames) {
+                    val childItem = child(name, actual.name.extension)
+                    childItem.visit(context, null, actual)
+                }
             }
         }
     }
@@ -183,7 +186,7 @@ class Item(val relativePath: String, ext: String) {
                 reporter.writeDiff(this, "contents") { print(expectedTxt) }
             }
         } else {
-            reporter.reportMismatch(this, FileStatus.MISMATCHED, fileKind)
+            reporter.reportMismatch(this, FileStatus.MISMATCHED, fileKind, expectedTxt, actualTxt)
 
             var expectedAndActualWasSaved = false
 

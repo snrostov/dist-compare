@@ -11,6 +11,11 @@ version '1.0-SNAPSHOT'
 repositories {
     mavenCentral()
     maven { url 'http://dl.bintray.com/kotlin/kotlin-eap' }
+    ivy {
+        File baseDir = new File(project.projectDir, "lib")
+        url = baseDir
+        artifactPattern("${baseDir.canonicalPath}/[organisation]-[artifact]-[revision](-[classifier]).jar")
+    }
 }
 
 dependencies {
@@ -20,6 +25,7 @@ dependencies {
     compile 'com.google.code.gson:gson:2.8.5'
     compile 'me.tongfei:progressbar:0.5.5'
     compile files("${System.getProperty('java.home')}/../lib/tools.jar")
+    compile "org.jetbrains.teamcity:serviceMessages:9.1.6"
 }
 
 compileKotlin {

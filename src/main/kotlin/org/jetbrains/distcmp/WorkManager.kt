@@ -7,11 +7,11 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-class WorkManager(val context: DiffContext) {
+class WorkManager(val settings: DiffSettings) {
     private var gatherting = AtomicBoolean(true)
     private val cpuExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
     private val progressBar: ProgressBar? =
-        if (context.settings.showProgress) ProgressBar("", 1, 300)
+        if (settings.showProgress) ProgressBar("", 1, 300)
         else null
     private val totalScheduled = AtomicInteger(0)
     private val toDoWork = AtomicInteger(0)

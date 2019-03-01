@@ -2,6 +2,7 @@ package org.jetbrains.distcmp
 
 import com.sun.net.httpserver.HttpServer
 import org.apache.commons.vfs2.VFS
+import org.jetbrains.distcmp.report.JsonReporter
 import org.jetbrains.distcmp.utils.HttpServerHandler
 import java.awt.Desktop
 import java.io.File
@@ -14,8 +15,10 @@ val devMode = System.getProperty("dev") != null
 val manager = VFS.getManager()
 
 fun main(args0: Array<String>) {
-    val context = DiffContext(args0)
+    val settings = DiffSettings(args0)
+    val workManager = WorkManager(settings)
 
+    val context = DiffContext(settings, workManager, JsonReporter(settings, workManager))
     if (context.settings.explicitReportDir) {
         removePreviousReport(context)
     }

@@ -15,16 +15,9 @@ val devMode = System.getProperty("dev") != null
 
 val manager = VFS.getManager()
 
-val gson = GsonBuilder()
-    .setPrettyPrinting()
-    .create()
-
-lateinit var jsonWriter: JsonWriter
-
 fun main(args0: Array<String>) {
     val context = DiffContext()
     context.workManager.startGathering()
-
 
     val args = if (devMode) arrayOf(
         "/Users/jetbrains/tasks/kwjps/wgradle/dist",
@@ -56,8 +49,7 @@ fun main(args0: Array<String>) {
 
     if (context.settings.runFrontend) copyHtmlApp(context)
 
-    jsonWriter = gson.newJsonWriter(context.settings.diffDir.resolve("data.json").writer())
-    jsonWriter.beginArray()
+    context.reporter.beginReport()
 
     Item("", "root")
         .visit(
@@ -67,10 +59,7 @@ fun main(args0: Array<String>) {
         )
 
     context.workManager.waitDone()
-
-    jsonWriter.endArray()
-    jsonWriter.close()
-
+    context.reporter.close()
     context.workManager.reportDone(context)
 
     if (context.settings.runFrontend) {

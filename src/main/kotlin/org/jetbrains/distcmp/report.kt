@@ -1,5 +1,6 @@
 package org.jetbrains.distcmp
 
+import com.google.gson.GsonBuilder
 import java.io.File
 import java.io.PrintWriter
 import java.nio.ByteBuffer
@@ -31,6 +32,21 @@ class Reporter(val context: DiffContext) {
     val diffs = AtomicInteger()
     val abortedDiffs = AtomicInteger()
     val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
+
+    private val gson = GsonBuilder()
+        .setPrettyPrinting()
+        .create()
+
+    private val jsonWriter = gson.newJsonWriter(context.settings.diffDir.resolve("data.json").writer())
+
+    fun beginReport() {
+        jsonWriter.beginArray()
+    }
+
+    fun close() {
+        jsonWriter.endArray()
+        jsonWriter.close()
+    }
 
     private fun Item.toInfo(fileKind: FileKind, fileStatus: FileStatus, diffs: Int) =
         FileInfo(id, relativePath, badExt, ext, fileStatus, fileKind, false, diffs)

@@ -124,8 +124,8 @@ class Item(val relativePath: String, ext: String) {
             else -> matchText(
                 context,
                 FileKind.CLASS,
-                classToText(expected),
-                classToText(actual),
+                classToText(context, expected),
+                classToText(context, actual),
                 expected,
                 actual
             )
@@ -177,7 +177,7 @@ class Item(val relativePath: String, ext: String) {
 
         if (expectedTxt == actualTxt) {
             reporter.reportMatch(this, fileKind)
-            if (saveMatchedContents) {
+            if (context.settings.saveMatchedContents) {
                 reporter.writeDiff(this, "contents") { print(expectedTxt) }
             }
         } else {
@@ -193,11 +193,11 @@ class Item(val relativePath: String, ext: String) {
                 reporter.writeDiff(this, "b.actual.txt") { print(actualTxt) }
             }
 
-            if (saveExpectedAndActual) {
+            if (context.settings.saveExpectedAndActual) {
                 ensureExpectedAndActualSaved()
             }
 
-            if (runDiff) {
+            if (context.settings.runDiff) {
                 val lines = expectedTxt.lines()
                 if (lines.size > 10000) {
                     reporter.writeDiffAborted(this, "File too large (${lines.size} lines > 10000)")
@@ -260,18 +260,19 @@ class Item(val relativePath: String, ext: String) {
         return context.reporter.itemsByDigest.getOrPut(digest) { id } != id
     }
 
-    private fun classToText(expected: FileObject): String {
+    private fun classToText(context: DiffContext, expected: FileObject): String {
         val txt = classToTxt(
+            context.settings,
             expected.content.inputStream,
             expected.name.baseName,
             expected.content.lastModifiedTime,
             expected.url.toURI()
         )
 
-        return if (compareClassVerbose) {
+        return if (context.settings.compareClassVerbose) {
             // remove timestamp and checksumm
             txt.lines().drop(3).joinToString("\n")
-        } else if (compareClassVerboseIgnoreCompiledFrom) {
+        } else if (context.settings.compareClassVerboseIgnoreCompiledFrom) {
             txt.lines().drop(1).joinToString("\n")
         } else {
             txt

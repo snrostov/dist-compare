@@ -65,7 +65,7 @@ class Reporter(val context: DiffContext) {
         if (outputWriter == null) return
 
         context.workManager.io {
-            val reportFile = File("${diffDir.path}/${item.relativePath}.$ext")
+            val reportFile = File("${context.settings.diffDir.path}/${item.relativePath}.$ext")
             reportFile.parentFile.mkdirs()
             reportFile.printWriter().use {
                 outputWriter(it)

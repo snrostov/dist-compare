@@ -12,18 +12,6 @@ import java.net.URI
 import java.nio.file.Files
 
 val devMode = System.getProperty("dev") != null
-lateinit var reportDir: File
-lateinit var diffDir: File
-
-val runDiff = true
-val saveExpectedAndActual = !runDiff
-val saveMatchedContents = false
-val compareClassVerbose = true
-val compareClassVerboseIgnoreCompiledFrom = false
-
-val showProgress = true
-val printTeamCityMessageServices = false
-val runFrontend = true //!devMode
 
 val manager = VFS.getManager()
 
@@ -34,6 +22,10 @@ val gson = GsonBuilder()
 lateinit var jsonWriter: JsonWriter
 
 fun main(args0: Array<String>) {
+    val context = DiffContext()
+    context.workManager.startGathering()
+
+
     val args = if (devMode) arrayOf(
         "/Users/jetbrains/tasks/kwjps/wgradle/dist",
         "/Users/jetbrains/tasks/kwjps/wjps/dist"
@@ -47,27 +39,24 @@ fun main(args0: Array<String>) {
     val expected = File(args[0])
     val actual = File(args[1])
     val explicitReportDir = args.size == 3
-    reportDir =
+    context.settings.reportDir =
         if (explicitReportDir) File(args[2])
         else Files.createTempDirectory("dist-compare").toFile()
 
-    println("Comparing `$expected` vs `$actual` to `$reportDir`")
+    println("Comparing `$expected` vs `$actual` to `${context.settings.reportDir}`")
 
     requireDir(expected)
     requireDir(actual)
-    requireDir(reportDir)
-
-    val context = DiffContext(DiffSettings())
-    context.workManager.startGathering()
+    requireDir(context.settings.reportDir)
 
     if (explicitReportDir) removePreviousReport(context)
 
-    diffDir = reportDir.resolve("diff")
-    diffDir.mkdir()
+    context.settings.diffDir = context.settings.reportDir.resolve("diff")
+    context.settings.diffDir.mkdir()
 
-    if (runFrontend) copyHtmlApp()
+    if (context.settings.runFrontend) copyHtmlApp(context)
 
-    jsonWriter = gson.newJsonWriter(diffDir.resolve("data.json").writer())
+    jsonWriter = gson.newJsonWriter(context.settings.diffDir.resolve("data.json").writer())
     jsonWriter.beginArray()
 
     Item("", "root")
@@ -84,11 +73,11 @@ fun main(args0: Array<String>) {
 
     context.workManager.reportDone(context)
 
-    if (runFrontend) {
+    if (context.settings.runFrontend) {
         println("Opening http://localhost:8000")
 
         val server = HttpServer.create(InetSocketAddress(8000), 0)
-        server.createContext("/", HttpServerHandler())
+        server.createContext("/", HttpServerHandler(context))
         server.executor = null
         server.start()
 
@@ -100,11 +89,11 @@ fun main(args0: Array<String>) {
 
 private fun removePreviousReport(context: DiffContext) {
     context.workManager.setProgressMessage("Removing previous report")
-    reportDir.deleteRecursively()
-    reportDir.mkdirs()
+    context.settings.reportDir.deleteRecursively()
+    context.settings.reportDir.mkdirs()
 }
 
-private fun copyHtmlApp() {
+private fun copyHtmlApp(context: DiffContext) {
     listOf(
         "2da2b42ac8b23e24cd2b832c22626baf.gif",
         "app.js",
@@ -116,12 +105,12 @@ private fun copyHtmlApp() {
         if (isLocalRun) {
             Files.copy(
                 File("js/dist/$it").toPath(),
-                File(reportDir, it).toPath()
+                File(context.settings.reportDir, it).toPath()
             )
         } else {
             Files.copy(
                 resourceAsStream,
-                File(reportDir, it).toPath()
+                File(context.settings.reportDir, it).toPath()
             )
         }
     }

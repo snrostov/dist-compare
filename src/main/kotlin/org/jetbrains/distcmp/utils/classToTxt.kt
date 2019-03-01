@@ -1,7 +1,7 @@
 package org.jetbrains.distcmp.utils
 
 import com.sun.tools.javap.JavapTask
-import org.jetbrains.distcmp.compareClassVerbose
+import org.jetbrains.distcmp.DiffSettings
 import java.io.*
 import java.net.URI
 import javax.lang.model.element.Modifier
@@ -10,11 +10,11 @@ import javax.tools.JavaFileObject
 
 fun shouldNotBeCalled(): Nothing = error("Should not be called")
 
-fun classToTxt(i: InputStream, name: String, modified: Long, uri: URI): String {
+fun classToTxt(settings: DiffSettings, i: InputStream, name: String, modified: Long, uri: URI): String {
     val str = StringWriter()
     val p = JavapTask()
     val options = mutableListOf<String>()
-    if (compareClassVerbose) {
+    if (settings.compareClassVerbose) {
         options.add("-v")
     }
     options.add("nothing")

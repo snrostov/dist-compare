@@ -5,5 +5,6 @@ class DiffSettings {
 }
 
 class DiffContext(val settings: DiffSettings) {
-    val reporter = Reporter()
+    val workManager = WorkManager(this)
+    val reporter = Reporter(this)
 }

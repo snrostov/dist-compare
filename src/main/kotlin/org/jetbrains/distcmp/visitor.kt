@@ -86,7 +86,7 @@ class Item(val relativePath: String, ext: String) {
         when {
             expected == null -> visitUnpaired(context, actual!!, FileStatus.UNEXPECTED)
             actual == null -> visitUnpaired(context, expected, FileStatus.MISSED)
-            else -> WorkManager.submit("READING $relativePath") {
+            else -> context.workManager.submit("READING $relativePath") {
                 when (expected.kind) {
                     FileKind.CLASS -> matchClass(context, expected, actual)
                     FileKind.TEXT -> matchText(context, expected, actual)
@@ -103,7 +103,7 @@ class Item(val relativePath: String, ext: String) {
         status: FileStatus
     ) {
         // check for copy (requires files content, so submit it in queue)
-        WorkManager.submit("READING UNPAIRED $relativePath") {
+        context.workManager.submit("READING UNPAIRED $relativePath") {
             if (isAlreadyAnalyzed(context, existed.md5())) context.reporter.reportCopy(this@Item, existed.kind)
             else context.reporter.reportMismatch(this@Item, status, existed.kind)
         }
@@ -204,7 +204,7 @@ class Item(val relativePath: String, ext: String) {
                     ensureExpectedAndActualSaved()
                 } else {
                     reporter.diffs.incrementAndGet()
-                    WorkManager.submit("DIFF FOR $relativePath") {
+                    context.workManager.submit("DIFF FOR $relativePath") {
                         var i = 0
                         try {
                             val patches = DiffUtils.diff<String>(lines, actualTxt.lines(), MyersDiff<String> { a, b ->

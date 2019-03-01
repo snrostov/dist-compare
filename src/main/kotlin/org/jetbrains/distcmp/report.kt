@@ -27,7 +27,7 @@ enum class FileKind {
     CLASS, TEXT, BIN, DIR
 }
 
-class Reporter {
+class Reporter(val context: DiffContext) {
     val diffs = AtomicInteger()
     val abortedDiffs = AtomicInteger()
     val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
@@ -36,7 +36,7 @@ class Reporter {
         FileInfo(id, relativePath, badExt, ext, fileStatus, fileKind, false, diffs)
 
     private fun writeItem(item: FileInfo) {
-        WorkManager.io {
+        context.workManager.io {
             gson.toJson(item, item.javaClass, jsonWriter)
         }
     }
@@ -64,7 +64,7 @@ class Reporter {
     ) {
         if (outputWriter == null) return
 
-        WorkManager.io {
+        context.workManager.io {
             val reportFile = File("${diffDir.path}/${item.relativePath}.$ext")
             reportFile.parentFile.mkdirs()
             reportFile.printWriter().use {

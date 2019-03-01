@@ -57,9 +57,10 @@ fun main(args0: Array<String>) {
     requireDir(actual)
     requireDir(reportDir)
 
-    WorkManager.startGathering()
+    val context = DiffContext(DiffSettings())
+    context.workManager.startGathering()
 
-    if (explicitReportDir) removePreviousReport()
+    if (explicitReportDir) removePreviousReport(context)
 
     diffDir = reportDir.resolve("diff")
     diffDir.mkdir()
@@ -69,8 +70,6 @@ fun main(args0: Array<String>) {
     jsonWriter = gson.newJsonWriter(diffDir.resolve("data.json").writer())
     jsonWriter.beginArray()
 
-    val context = DiffContext(DiffSettings())
-
     Item("", "root")
         .visit(
             context,
@@ -78,12 +77,12 @@ fun main(args0: Array<String>) {
             manager.resolveFile(actual, "")
         )
 
-    WorkManager.waitDone()
+    context.workManager.waitDone()
 
     jsonWriter.endArray()
     jsonWriter.close()
 
-    WorkManager.reportDone(context)
+    context.workManager.reportDone(context)
 
     if (runFrontend) {
         println("Opening http://localhost:8000")
@@ -99,8 +98,8 @@ fun main(args0: Array<String>) {
     }
 }
 
-private fun removePreviousReport() {
-    WorkManager.setProgressMessage("Removing previous report")
+private fun removePreviousReport(context: DiffContext) {
+    context.workManager.setProgressMessage("Removing previous report")
     reportDir.deleteRecursively()
     reportDir.mkdirs()
 }

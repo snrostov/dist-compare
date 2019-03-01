@@ -28,10 +28,33 @@ enum class FileKind {
     CLASS, TEXT, BIN, DIR
 }
 
-class Reporter(val context: DiffContext) {
-    val diffs = AtomicInteger()
-    val abortedDiffs = AtomicInteger()
-    val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
+interface Reporter {
+    val diffs: AtomicInteger
+    val abortedDiffs: AtomicInteger
+    val itemsByDigest: ConcurrentHashMap<ByteBuffer, Int>
+    fun beginReport()
+    fun close()
+    fun reportMatch(item: Item, fileKind: FileKind)
+    fun reportCopy(item: Item, fileKind: FileKind)
+    fun reportMismatch(
+        item: Item,
+        status: FileStatus,
+        fileKind: FileKind
+    )
+
+    fun writeDiff(
+        item: Item,
+        ext: String = "patch",
+        outputWriter: (PrintWriter.() -> Unit)? = null
+    )
+
+    fun writeDiffAborted(item: Item, reason: String)
+}
+
+class JsonReporter(val context: DiffContext) : Reporter {
+    override val diffs = AtomicInteger()
+    override val abortedDiffs = AtomicInteger()
+    override val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
 
     private val gson = GsonBuilder()
         .setPrettyPrinting()
@@ -39,11 +62,11 @@ class Reporter(val context: DiffContext) {
 
     private val jsonWriter = gson.newJsonWriter(context.settings.diffDir.resolve("data.json").writer())
 
-    fun beginReport() {
+    override fun beginReport() {
         jsonWriter.beginArray()
     }
 
-    fun close() {
+    override fun close() {
         jsonWriter.endArray()
         jsonWriter.close()
     }
@@ -57,15 +80,15 @@ class Reporter(val context: DiffContext) {
         }
     }
 
-    fun reportMatch(item: Item, fileKind: FileKind) {
+    override fun reportMatch(item: Item, fileKind: FileKind) {
         writeItem(item.toInfo(fileKind, FileStatus.MATCHED, 0))
     }
 
-    fun reportCopy(item: Item, fileKind: FileKind) {
+    override fun reportCopy(item: Item, fileKind: FileKind) {
         writeItem(item.toInfo(fileKind, FileStatus.COPY, 0))
     }
 
-    fun reportMismatch(
+    override fun reportMismatch(
         item: Item,
         status: FileStatus,
         fileKind: FileKind
@@ -73,10 +96,10 @@ class Reporter(val context: DiffContext) {
         writeItem(item.toInfo(fileKind, status, item.diffsCount))
     }
 
-    fun writeDiff(
+    override fun writeDiff(
         item: Item,
-        ext: String = "patch",
-        outputWriter: (PrintWriter.() -> Unit)? = null
+        ext: String,
+        outputWriter: (PrintWriter.() -> Unit)?
     ) {
         if (outputWriter == null) return
 
@@ -89,7 +112,7 @@ class Reporter(val context: DiffContext) {
         }
     }
 
-    fun writeDiffAborted(item: Item, reason: String) {
+    override fun writeDiffAborted(item: Item, reason: String) {
         abortedDiffs.incrementAndGet()
         writeDiff(item) {
             println("[DIFF-ABORTED] $reason")

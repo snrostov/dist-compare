@@ -1,10 +1,8 @@
 package org.jetbrains.distcmp
 
-import com.github.difflib.patch.Delta
 import java.io.File
 import java.io.PrintWriter
 import java.nio.ByteBuffer
-import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -29,75 +27,56 @@ enum class FileKind {
     CLASS, TEXT, BIN, DIR
 }
 
-val diffs = AtomicInteger()
-val abortedDiffs = AtomicInteger()
-val lastId = AtomicInteger()
-val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
+class Reporter {
+    val diffs = AtomicInteger()
+    val abortedDiffs = AtomicInteger()
+    val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
 
-val patchDigest = ConcurrentHashMap<ByteBuffer, Int>()
-val patchId = AtomicInteger()
+    private fun Item.toInfo(fileKind: FileKind, fileStatus: FileStatus, diffs: Int) =
+        FileInfo(id, relativePath, badExt, ext, fileStatus, fileKind, false, diffs)
 
-fun deltasDigests(deltas: MutableList<Delta<String>>): List<Int> {
-    return deltas.mapTo(mutableSetOf()) {
-        val md5 = MessageDigest.getInstance("MD5")
-        it.original.lines.forEach {
-            md5.update(it.toByteArray())
-        }
-        it.revised.lines.forEach {
-            md5.update(it.toByteArray())
-        }
-        val bb = ByteBuffer.wrap(md5.digest())
-        patchDigest.getOrPut(bb) { patchId.incrementAndGet() }
-    }.toList()
-}
-
-fun Item.toInfo(fileKind: FileKind, fileStatus: FileStatus, diffs: Int) =
-    FileInfo(id, relativePath, badExt, ext, fileStatus, fileKind, false, diffs)
-
-private fun writeItem(item: FileInfo) {
-    WorkManager.io {
-        gson.toJson(item, item.javaClass, jsonWriter)
-    }
-}
-
-fun Item.reportMatch(fileKind: FileKind) {
-    val item = toInfo(fileKind, FileStatus.MATCHED, 0)
-    writeItem(item)
-}
-
-fun Item.reportCopy(fileKind: FileKind) {
-    val item = toInfo(fileKind, FileStatus.COPY, 0)
-    writeItem(item)
-}
-
-fun Item.reportMismatch(
-    status: FileStatus,
-    fileKind: FileKind
-) {
-    val item = toInfo(fileKind, status, diffsCount)
-    writeItem(item)
-}
-
-fun Item.writeDiff(ext: String = "patch", outputWriter: (PrintWriter.() -> Unit)? = null) {
-    if (outputWriter == null) return
-
-    WorkManager.io {
-        val reportFile = File("${diffDir.path}/$relativePath.$ext")
-        reportFile.parentFile.mkdirs()
-        reportFile.printWriter().use {
-            outputWriter(it)
+    private fun writeItem(item: FileInfo) {
+        WorkManager.io {
+            gson.toJson(item, item.javaClass, jsonWriter)
         }
     }
-}
 
-fun Item.writeDiffAborted(reason: String) {
-    abortedDiffs.incrementAndGet()
-    writeDiff {
-        println("[DIFF-ABORTED] $reason")
+    fun reportMatch(item: Item, fileKind: FileKind) {
+        writeItem(item.toInfo(fileKind, FileStatus.MATCHED, 0))
     }
-}
 
+    fun reportCopy(item: Item, fileKind: FileKind) {
+        writeItem(item.toInfo(fileKind, FileStatus.COPY, 0))
+    }
 
-fun printTotals() {
-    println("total: ${lastId}")
+    fun reportMismatch(
+        item: Item,
+        status: FileStatus,
+        fileKind: FileKind
+    ) {
+        writeItem(item.toInfo(fileKind, status, item.diffsCount))
+    }
+
+    fun writeDiff(
+        item: Item,
+        ext: String = "patch",
+        outputWriter: (PrintWriter.() -> Unit)? = null
+    ) {
+        if (outputWriter == null) return
+
+        WorkManager.io {
+            val reportFile = File("${diffDir.path}/${item.relativePath}.$ext")
+            reportFile.parentFile.mkdirs()
+            reportFile.printWriter().use {
+                outputWriter(it)
+            }
+        }
+    }
+
+    fun writeDiffAborted(item: Item, reason: String) {
+        abortedDiffs.incrementAndGet()
+        writeDiff(item) {
+            println("[DIFF-ABORTED] $reason")
+        }
+    }
 }

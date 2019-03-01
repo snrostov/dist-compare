@@ -75,9 +75,11 @@ object WorkManager {
         progressBar?.maxHint(totalScheduled.get().toLong())
     }
 
-    fun reportDone() {
+    fun reportDone(context: DiffContext) {
+        val reporter = context.reporter
+
         progressBar?.stepTo(totalScheduled.get().toLong())
-        setProgressMessage("$lastId files, ${itemsByDigest.size} unique, $diffs diffs ($abortedDiffs aborted)")
+        setProgressMessage("$lastId files, ${reporter.diffs} diffs (${reporter.abortedDiffs} aborted)")
         progressBar?.stop()
     }
 

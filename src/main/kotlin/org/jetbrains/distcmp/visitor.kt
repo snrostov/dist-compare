@@ -10,6 +10,9 @@ import org.jetbrains.distcmp.utils.kind
 import org.jetbrains.distcmp.utils.md5
 import java.nio.ByteBuffer
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicInteger
+
+val lastId = AtomicInteger()
 
 class Item(val relativePath: String, ext: String) {
     val id = lastId.incrementAndGet()
@@ -19,31 +22,37 @@ class Item(val relativePath: String, ext: String) {
     val ext = if (badExt) "" else ext
     var diffsCount = 0
 
-    fun visit(expected: FileObject?, actual: FileObject?) {
+    fun visit(
+        context: DiffContext,
+        expected: FileObject?,
+        actual: FileObject?
+    ) {
         require(expected != null || actual != null)
         val expectedOrActual = expected ?: actual!!
 
         when {
             expectedOrActual.isFolder -> visitDirectory(
-                expected?.children?.toList(),
-                actual?.children?.toList()
+                context,
+                expected?.children?.toList(), actual?.children?.toList()
             )
             manager.canCreateFileSystem(expectedOrActual) -> visitDirectory(
-                if (expected == null) null else manager.createFileSystem(expected).children.toList(),
-                if (actual == null) null else manager.createFileSystem(actual).children.toList()
+                context,
+                if (expected == null) null else manager.createFileSystem(expected).children.toList(), if (actual == null) null else manager.createFileSystem(actual).children.toList()
             )
-            else -> visitFile(expected, actual)
+            else -> visitFile(context, expected, actual)
         }
     }
 
     private fun visitDirectory(
+        context: DiffContext,
         expectedChildren: List<FileObject>?,
         actualChildren: List<FileObject>?
     ) {
         require(expectedChildren != null || actualChildren != null)
 
-        if (expectedChildren == null) reportMismatch(FileStatus.UNEXPECTED, FileKind.DIR)
-        else if (actualChildren == null) reportMismatch(FileStatus.MISSED, FileKind.DIR)
+        val reporter = context.reporter
+        if (expectedChildren == null) reporter.reportMismatch(this@Item, FileStatus.UNEXPECTED, FileKind.DIR)
+        else if (actualChildren == null) reporter.reportMismatch(this@Item, FileStatus.MISSED, FileKind.DIR)
 
         val actualChildrenByName = actualChildren?.associateBy { it.name.baseName }
         val expectedChildrenNames = mutableSetOf<String>()
@@ -56,7 +65,7 @@ class Item(val relativePath: String, ext: String) {
             if (actual != null) expectedChildrenNames.add(name)
 
             val childItem = child(name, expected.name.extension)
-            childItem.visit(expected, actual)
+            childItem.visit(context, expected, actual)
         }
 
         // mark unexpected items
@@ -64,42 +73,56 @@ class Item(val relativePath: String, ext: String) {
             val name = actual.name.baseName
             if (name !in expectedChildrenNames) {
                 val childItem = child(name, actual.name.extension)
-                childItem.visit(null, actual)
+                childItem.visit(context, null, actual)
             }
         }
     }
 
-    private fun visitFile(expected: FileObject?, actual: FileObject?) {
+    private fun visitFile(
+        context: DiffContext,
+        expected: FileObject?,
+        actual: FileObject?
+    ) {
         when {
-            expected == null -> visitUnpaired(actual!!, FileStatus.UNEXPECTED)
-            actual == null -> visitUnpaired(expected, FileStatus.MISSED)
+            expected == null -> visitUnpaired(context, actual!!, FileStatus.UNEXPECTED)
+            actual == null -> visitUnpaired(context, expected, FileStatus.MISSED)
             else -> WorkManager.submit("READING $relativePath") {
                 when (expected.kind) {
-                    FileKind.CLASS -> matchClass(expected, actual)
-                    FileKind.TEXT -> matchText(expected, actual)
-                    FileKind.BIN -> matchBin(expected, actual)
+                    FileKind.CLASS -> matchClass(context, expected, actual)
+                    FileKind.TEXT -> matchText(context, expected, actual)
+                    FileKind.BIN -> matchBin(context, expected, actual)
                     FileKind.DIR -> error("should not be directory")
                 }
             }
         }
     }
 
-    private fun visitUnpaired(existed: FileObject, status: FileStatus) {
+    private fun visitUnpaired(
+        context: DiffContext,
+        existed: FileObject,
+        status: FileStatus
+    ) {
         // check for copy (requires files content, so submit it in queue)
         WorkManager.submit("READING UNPAIRED $relativePath") {
-            if (isAlreadyAnalyzed(existed.md5())) reportCopy(existed.kind)
-            else reportMismatch(status, existed.kind)
+            if (isAlreadyAnalyzed(context, existed.md5())) context.reporter.reportCopy(this@Item, existed.kind)
+            else context.reporter.reportMismatch(this@Item, status, existed.kind)
         }
     }
 
-    private fun matchClass(expected: FileObject, actual: FileObject) {
+    private fun matchClass(
+        context: DiffContext,
+        expected: FileObject,
+        actual: FileObject
+    ) {
         val expectedTxt = expected.content.inputStream.bufferedReader().readText()
         val actualTxt = actual.content.inputStream.bufferedReader().readText()
 
+        val reporter = context.reporter
         when {
-            isAlreadyAnalyzed(expectedTxt, actualTxt) -> reportCopy(FileKind.CLASS)
-            actualTxt == expectedTxt -> reportMatch(FileKind.CLASS)
+            isAlreadyAnalyzed(context, expectedTxt, actualTxt) -> reporter.reportCopy(this@Item, FileKind.CLASS)
+            actualTxt == expectedTxt -> reporter.reportMatch(this@Item, FileKind.CLASS)
             else -> matchText(
+                context,
                 FileKind.CLASS,
                 classToText(expected),
                 classToText(actual),
@@ -109,25 +132,29 @@ class Item(val relativePath: String, ext: String) {
         }
     }
 
-    private fun matchText(expected: FileObject, actual: FileObject) {
+    private fun matchText(
+        context: DiffContext,
+        expected: FileObject,
+        actual: FileObject
+    ) {
         val expectedTxt = expected.content.inputStream.bufferedReader().readText()
         val actualTxt = actual.content.inputStream.bufferedReader().readText()
 
-        if (isAlreadyAnalyzed(expectedTxt, actualTxt)) reportCopy(FileKind.TEXT)
-        else matchText(FileKind.TEXT, expectedTxt, actualTxt, expected, actual)
+        if (isAlreadyAnalyzed(context, expectedTxt, actualTxt)) context.reporter.reportCopy(this@Item, FileKind.TEXT)
+        else matchText(context, FileKind.TEXT, expectedTxt, actualTxt, expected, actual)
     }
 
-    private fun matchBin(expected: FileObject, actual: FileObject) {
+    private fun matchBin(context: DiffContext, expected: FileObject, actual: FileObject) {
         if (expected.content.size != actual.content.size) {
-            reportMismatch(FileStatus.MISMATCHED, FileKind.BIN)
+            context.reporter.reportMismatch(this@Item, FileStatus.MISMATCHED, FileKind.BIN)
         } else {
             val expectedTxt = expected.content.inputStream.bufferedReader().readText()
             val actualTxt = actual.content.inputStream.bufferedReader().readText()
 
             when {
-                isAlreadyAnalyzed(expectedTxt, actualTxt) -> reportCopy(FileKind.BIN)
-                expectedTxt == actualTxt -> reportMatch(FileKind.BIN)
-                else -> reportMismatch(FileStatus.MISMATCHED, FileKind.BIN)
+                isAlreadyAnalyzed(context, expectedTxt, actualTxt) -> context.reporter.reportCopy(this@Item, FileKind.BIN)
+                expectedTxt == actualTxt -> context.reporter.reportMatch(this@Item, FileKind.BIN)
+                else -> context.reporter.reportMismatch(this@Item, FileStatus.MISMATCHED, FileKind.BIN)
             }
         }
     }
@@ -139,19 +166,22 @@ class Item(val relativePath: String, ext: String) {
     }
 
     private fun matchText(
+        context: DiffContext,
         fileKind: FileKind,
         expectedTxt: String,
         actualTxt: String,
         expected: FileObject,
         actual: FileObject
     ) {
+        val reporter = context.reporter
+
         if (expectedTxt == actualTxt) {
-            reportMatch(fileKind)
+            reporter.reportMatch(this, fileKind)
             if (saveMatchedContents) {
-                writeDiff("contents") { print(expectedTxt) }
+                reporter.writeDiff(this, "contents") { print(expectedTxt) }
             }
         } else {
-            reportMismatch(FileStatus.MISMATCHED, fileKind)
+            reporter.reportMismatch(this, FileStatus.MISMATCHED, fileKind)
 
             var expectedAndActualWasSaved = false
 
@@ -159,8 +189,8 @@ class Item(val relativePath: String, ext: String) {
                 if (expectedAndActualWasSaved) return
                 expectedAndActualWasSaved = true
 
-                writeDiff("a.expected.txt") { print(expectedTxt) }
-                writeDiff("b.actual.txt") { print(actualTxt) }
+                reporter.writeDiff(this, "a.expected.txt") { print(expectedTxt) }
+                reporter.writeDiff(this, "b.actual.txt") { print(actualTxt) }
             }
 
             if (saveExpectedAndActual) {
@@ -170,10 +200,10 @@ class Item(val relativePath: String, ext: String) {
             if (runDiff) {
                 val lines = expectedTxt.lines()
                 if (lines.size > 10000) {
-                    writeDiffAborted("File too large (${lines.size} lines > 10000)")
+                    reporter.writeDiffAborted(this, "File too large (${lines.size} lines > 10000)")
                     ensureExpectedAndActualSaved()
                 } else {
-                    diffs.incrementAndGet()
+                    reporter.diffs.incrementAndGet()
                     WorkManager.submit("DIFF FOR $relativePath") {
                         var i = 0
                         try {
@@ -193,7 +223,7 @@ class Item(val relativePath: String, ext: String) {
                             )
 
                             val limit = 1000
-                            writeDiff {
+                            reporter.writeDiff(this) {
                                 diff.asSequence().take(limit).forEach {
                                     println(it)
                                 }
@@ -203,7 +233,8 @@ class Item(val relativePath: String, ext: String) {
                                 }
                             }
                         } catch (e: TooManyComparsions) {
-                            writeDiffAborted(
+                            reporter.writeDiffAborted(
+                                this,
                                 "Building diff takes too long ($i comparisons). " +
                                         "Please see origin files " +
                                         "(saved below with extensions .a.expected.txt and .b.actual.txt)"
@@ -217,16 +248,16 @@ class Item(val relativePath: String, ext: String) {
         }
     }
 
-    fun isAlreadyAnalyzed(expectedTxt: String, actualTxt: String): Boolean {
+    fun isAlreadyAnalyzed(context: DiffContext, expectedTxt: String, actualTxt: String): Boolean {
         val md5 = MessageDigest.getInstance("MD5")
         md5.update(expectedTxt.toByteArray())
         md5.update(actualTxt.toByteArray())
-        return isAlreadyAnalyzed(md5)
+        return isAlreadyAnalyzed(context, md5)
     }
 
-    private fun isAlreadyAnalyzed(md5: MessageDigest): Boolean {
+    private fun isAlreadyAnalyzed(context: DiffContext, md5: MessageDigest): Boolean {
         val digest = ByteBuffer.wrap(md5.digest())
-        return itemsByDigest.getOrPut(digest) { id } != id
+        return context.reporter.itemsByDigest.getOrPut(digest) { id } != id
     }
 
     private fun classToText(expected: FileObject): String {

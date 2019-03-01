@@ -12,7 +12,6 @@ import java.net.URI
 import java.nio.file.Files
 
 val devMode = System.getProperty("dev") != null
-val runFrontend = true //!devMode
 lateinit var reportDir: File
 lateinit var diffDir: File
 
@@ -24,6 +23,7 @@ val compareClassVerboseIgnoreCompiledFrom = false
 
 val showProgress = true
 val printTeamCityMessageServices = false
+val runFrontend = true //!devMode
 
 val manager = VFS.getManager()
 
@@ -69,8 +69,11 @@ fun main(args0: Array<String>) {
     jsonWriter = gson.newJsonWriter(diffDir.resolve("data.json").writer())
     jsonWriter.beginArray()
 
+    val context = DiffContext(DiffSettings())
+
     Item("", "root")
         .visit(
+            context,
             manager.resolveFile(expected, ""),
             manager.resolveFile(actual, "")
         )
@@ -80,7 +83,7 @@ fun main(args0: Array<String>) {
     jsonWriter.endArray()
     jsonWriter.close()
 
-    WorkManager.reportDone()
+    WorkManager.reportDone(context)
 
     if (runFrontend) {
         println("Opening http://localhost:8000")
@@ -108,14 +111,17 @@ private fun copyHtmlApp() {
         "app.js",
         "index.html"
     ).forEach {
-        if (devMode) {
+        val resourceAsStream = Item::class.java.getResourceAsStream("js/$it")
+        val isLocalRun = devMode || resourceAsStream == null
+
+        if (isLocalRun) {
             Files.copy(
                 File("js/dist/$it").toPath(),
                 File(reportDir, it).toPath()
             )
         } else {
             Files.copy(
-                Item::class.java.getResourceAsStream("js/$it"),
+                resourceAsStream,
                 File(reportDir, it).toPath()
             )
         }

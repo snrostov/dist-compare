@@ -1,7 +1,5 @@
 package org.jetbrains.distcmp
 
-import com.google.gson.GsonBuilder
-import com.google.gson.stream.JsonWriter
 import com.sun.net.httpserver.HttpServer
 import org.apache.commons.vfs2.VFS
 import org.jetbrains.distcmp.utils.HttpServerHandler
@@ -16,36 +14,13 @@ val devMode = System.getProperty("dev") != null
 val manager = VFS.getManager()
 
 fun main(args0: Array<String>) {
-    val context = DiffContext()
-    context.workManager.startGathering()
+    val context = DiffContext(args0)
 
-    val args = if (devMode) arrayOf(
-        "/Users/jetbrains/tasks/kwjps/wgradle/dist",
-        "/Users/jetbrains/tasks/kwjps/wjps/dist"
-    ) else args0
-
-    if (args.size !in 2..3) {
-        println("Usage: distdiff <expected-dir> <actual-dir> [reports-dir]")
-        return
+    if (context.settings.explicitReportDir) {
+        removePreviousReport(context)
     }
 
-    val expected = File(args[0])
-    val actual = File(args[1])
-    val explicitReportDir = args.size == 3
-    context.settings.reportDir =
-        if (explicitReportDir) File(args[2])
-        else Files.createTempDirectory("dist-compare").toFile()
-
-    println("Comparing `$expected` vs `$actual` to `${context.settings.reportDir}`")
-
-    requireDir(expected)
-    requireDir(actual)
-    requireDir(context.settings.reportDir)
-
-    if (explicitReportDir) removePreviousReport(context)
-
-    context.settings.diffDir = context.settings.reportDir.resolve("diff")
-    context.settings.diffDir.mkdir()
+    context.workManager.startGathering()
 
     if (context.settings.runFrontend) copyHtmlApp(context)
 
@@ -54,8 +29,8 @@ fun main(args0: Array<String>) {
     Item("", "root")
         .visit(
             context,
-            manager.resolveFile(expected, ""),
-            manager.resolveFile(actual, "")
+            manager.resolveFile(context.settings.expected, ""),
+            manager.resolveFile(context.settings.actual, "")
         )
 
     context.workManager.waitDone()
@@ -74,12 +49,6 @@ fun main(args0: Array<String>) {
             Desktop.getDesktop().browse(URI("http://localhost:8000"))
         }
     }
-}
-
-private fun removePreviousReport(context: DiffContext) {
-    context.workManager.setProgressMessage("Removing previous report")
-    context.settings.reportDir.deleteRecursively()
-    context.settings.reportDir.mkdirs()
 }
 
 private fun copyHtmlApp(context: DiffContext) {
@@ -105,9 +74,8 @@ private fun copyHtmlApp(context: DiffContext) {
     }
 }
 
-private fun requireDir(file: File) {
-    if (!file.isDirectory) {
-        println("$file is not a directory")
-        System.exit(1)
-    }
+private fun removePreviousReport(context: DiffContext) {
+    context.workManager.setProgressMessage("Removing previous report")
+    context.settings.reportDir.deleteRecursively()
+    context.settings.reportDir.mkdirs()
 }

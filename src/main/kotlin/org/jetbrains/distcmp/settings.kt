@@ -1,33 +1,28 @@
 package org.jetbrains.distcmp
 
+import org.jetbrains.distcmp.report.JsonReporter
 import org.jetbrains.distcmp.report.Reporter
+import org.jetbrains.distcmp.report.TeamCityReporter
+import org.jetbrains.distcmp.utils.requireDir
 import java.io.File
-import java.nio.file.Files
-
-data class DiffContext(
-    val settings: DiffSettings,
-    val workManager: WorkManager,
-    val reporter: Reporter
-)
 
 class DiffSettings(args0: Array<String>) {
     val expected: File
     val actual: File
 
-    val reportDir: File
-    val diffDir: File
+    val teamCity = false
 
-    val runDiff = true
+    val runDiff = !teamCity
     val saveExpectedAndActual = !runDiff
     val saveMatchedContents = false
+
     val compareClassVerbose = true
     val compareClassVerboseIgnoreCompiledFrom = false
 
-    val showProgress = true
-    val printTeamCityMessageServices = false
+    val showProgress = !teamCity
     val runFrontend = true //!devMode
 
-    val explicitReportDir: Boolean
+    val reportArgs: List<String>
 
     init {
         val args = if (devMode) arrayOf(
@@ -42,25 +37,20 @@ class DiffSettings(args0: Array<String>) {
 
         expected = File(args[0])
         actual = File(args[1])
-        explicitReportDir = args.size == 3
-        reportDir =
-            if (explicitReportDir) File(args[2])
-            else Files.createTempDirectory("dist-compare").toFile()
-
-        println("Comparing `$expected` vs `$actual` to `${reportDir}`")
+        reportArgs = args.drop(2)
 
         requireDir(expected)
         requireDir(actual)
-        requireDir(reportDir)
-
-        diffDir = reportDir.resolve("diff")
-        diffDir.mkdir()
     }
 
-    private fun requireDir(file: File) {
-        if (!file.isDirectory) {
-            println("$file is not a directory")
-            System.exit(1)
+    fun createReporter(workManager: WorkManager): Reporter =
+        if (teamCity) {
+            TeamCityReporter(this, workManager, "root")
+        } else {
+            JsonReporter(
+                this,
+                workManager,
+                if (reportArgs.isNotEmpty()) File(reportArgs[0]) else null
+            )
         }
-    }
 }

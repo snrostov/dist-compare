@@ -6,6 +6,7 @@ import com.github.difflib.algorithm.myers.MyersDiff
 import org.apache.commons.vfs2.FileObject
 import org.jetbrains.distcmp.report.FileKind
 import org.jetbrains.distcmp.report.FileStatus
+import org.jetbrains.distcmp.report.Reporter
 import org.jetbrains.distcmp.utils.classToTxt
 import org.jetbrains.distcmp.utils.isBadExt
 import org.jetbrains.distcmp.utils.kind
@@ -15,6 +16,12 @@ import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicInteger
 
 val lastId = AtomicInteger()
+
+data class DiffContext(
+    val settings: DiffSettings,
+    val workManager: WorkManager,
+    val reporter: Reporter
+)
 
 class Item(val relativePath: String, ext: String) {
     val id = lastId.incrementAndGet()

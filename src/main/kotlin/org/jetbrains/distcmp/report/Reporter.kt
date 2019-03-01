@@ -1,4 +1,30 @@
 package org.jetbrains.distcmp.report
 
+import org.jetbrains.distcmp.Item
+import java.io.PrintWriter
+import java.nio.ByteBuffer
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+
 interface Reporter {
+    val diffs: AtomicInteger
+    val abortedDiffs: AtomicInteger
+    val itemsByDigest: ConcurrentHashMap<ByteBuffer, Int>
+    fun beginReport()
+    fun close()
+    fun reportMatch(item: Item, fileKind: FileKind)
+    fun reportCopy(item: Item, fileKind: FileKind)
+    fun reportMismatch(
+        item: Item,
+        status: FileStatus,
+        fileKind: FileKind
+    )
+
+    fun writeDiff(
+        item: Item,
+        ext: String = "patch",
+        outputWriter: (PrintWriter.() -> Unit)? = null
+    )
+
+    fun writeDiffAborted(item: Item, reason: String)
 }

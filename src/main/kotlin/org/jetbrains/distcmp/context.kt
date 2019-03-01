@@ -1,5 +1,7 @@
 package org.jetbrains.distcmp
 
+import org.jetbrains.distcmp.report.JsonReporter
+import org.jetbrains.distcmp.report.Reporter
 import java.io.File
 
 class DiffSettings {

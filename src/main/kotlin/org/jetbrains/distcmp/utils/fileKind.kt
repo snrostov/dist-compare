@@ -1,7 +1,7 @@
 package org.jetbrains.distcmp.utils
 
 import org.apache.commons.vfs2.FileObject
-import org.jetbrains.distcmp.FileKind
+import org.jetbrains.distcmp.report.FileKind
 
 val FileObject.kind: FileKind
     get() =

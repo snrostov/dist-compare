@@ -4,6 +4,8 @@ import com.github.difflib.DiffUtils
 import com.github.difflib.UnifiedDiffUtils
 import com.github.difflib.algorithm.myers.MyersDiff
 import org.apache.commons.vfs2.FileObject
+import org.jetbrains.distcmp.report.FileKind
+import org.jetbrains.distcmp.report.FileStatus
 import org.jetbrains.distcmp.utils.classToTxt
 import org.jetbrains.distcmp.utils.isBadExt
 import org.jetbrains.distcmp.utils.kind

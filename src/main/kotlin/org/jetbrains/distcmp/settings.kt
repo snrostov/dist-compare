@@ -26,11 +26,27 @@ class DiffSettings(args: Array<String>) {
         val freeArgs = mutableListOf<String>()
         args.forEach {
             when {
-                it == "--abiOnly" -> abiOnly()
-                it == "--teamCity" -> teamCity()
-                it == "--noDiff" -> noDiff()
-                it == "--statusOnly" -> statusOnly()
-                it == "--saveAllContents" -> saveAllContents()
+                it == "--abiOnly" -> {
+                    compareClassVerbose = false
+                    compareClassVerboseIgnoreCompiledFrom = true
+                }
+                it == "--teamCity" -> {
+                    teamCity = true
+                    showProgress = false
+                }
+                it == "--noDiff" -> {
+                    runDiff = true
+                    saveExpectedAndActual = true
+                }
+                it == "--statusOnly" -> {
+                    runDiff = true
+                    saveExpectedAndActual = false
+                    saveMatchedContents = false
+                }
+                it == "--saveAllContents" -> {
+                    saveExpectedAndActual = true
+                    saveMatchedContents = true
+                }
                 it.startsWith("--") -> printUsage("Unknown flag `$it`")
                 else -> freeArgs.add(it)
             }
@@ -52,32 +68,6 @@ class DiffSettings(args: Array<String>) {
         reason?.let(::println)
         println("Usage: distdiff <expected-dir> <actual-dir> [reports-dir] [--abiOnly] [--teamCity] [--noDiff] [--statusOnly] [--saveAllContents]")
         System.exit(1)
-    }
-
-    fun abiOnly() {
-        compareClassVerbose = false
-        compareClassVerboseIgnoreCompiledFrom = true
-    }
-
-    fun noDiff() {
-        runDiff = true
-        saveExpectedAndActual = true
-    }
-
-    fun statusOnly() {
-        runDiff = true
-        saveExpectedAndActual = false
-        saveMatchedContents = false
-    }
-
-    fun saveAllContents() {
-        saveExpectedAndActual = true
-        saveMatchedContents = true
-    }
-
-    fun teamCity() {
-        teamCity = true
-        showProgress = false
     }
 
     fun createReporter(workManager: WorkManager): Reporter =

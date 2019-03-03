@@ -30,6 +30,6 @@ fun main(args0: Array<String>) {
     workManager.waitDone()
     reporter.close()
     workManager.reportDone(context)
-
     workManager.setProgressMessage(visitor.stats)
+    reporter.show()
 }

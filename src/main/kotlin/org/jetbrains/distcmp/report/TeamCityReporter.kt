@@ -25,6 +25,10 @@ class TeamCityReporter(
         send(TestSuiteFinished("root"))
     }
 
+    override fun show() {
+
+    }
+
     private fun send(msg: ServiceMessage) {
         msg.setFlowId(flowId)
         out.println(msg.asString())

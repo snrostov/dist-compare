@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger
 interface Reporter {
     fun beginReport()
     fun close()
+    fun show()
 
     fun dir(item: Item, body: (DiffContext) -> Unit)
     fun reportMatch(item: Item, fileKind: FileKind)

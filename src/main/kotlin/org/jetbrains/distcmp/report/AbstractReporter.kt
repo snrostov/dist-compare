@@ -4,14 +4,11 @@ import org.jetbrains.distcmp.DiffContext
 import org.jetbrains.distcmp.DiffSettings
 import org.jetbrains.distcmp.Item
 import org.jetbrains.distcmp.WorkManager
-import java.nio.ByteBuffer
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicInteger
 
 abstract class AbstractReporter(
     val settings: DiffSettings,
     val workManager: WorkManager
-) :Reporter {
+) : Reporter {
     val rootContext = DiffContext(settings, workManager, this)
 
     override fun dir(item: Item, body: (DiffContext) -> Unit) {

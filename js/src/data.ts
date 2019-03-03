@@ -9,6 +9,10 @@ interface Item {
     deltas: Array<number>
 }
 
+function isDiffStatus(status: String) {
+    return status != 'MATCHED' && status != 'COPY' && status != null
+}
+
 export class DataStore {
     all: Item[];
     fields: string[] = ["status", "kind", "extension"];
@@ -18,7 +22,7 @@ export class DataStore {
 
         for (let item of data) {
             if (item) {
-                if (item.noExtension || item.extension.length == 0) item.extension = "NO EXT"
+                if (item.noExtension || item.extension.length == 0) item.extension = "NO EXT";
                 this.all.push(item)
             }
         }
@@ -47,9 +51,17 @@ export class DataStore {
             for (let fieldValues of filteredFields) {
                 const itemValue = item[fieldValues.field];
 
-                if (itemValue != fieldValues.selected) {
-                    matched = false;
-                    // don't break, we should collect all values for selected filter
+                let selectedValue = fieldValues.selected;
+                if (selectedValue == 'diff') {
+                    if (!isDiffStatus(itemValue)) {
+                        matched = false;
+                        // don't break, we should collect all values for selected filter
+                    }
+                } else {
+                    if (itemValue != selectedValue) {
+                        matched = false;
+                        // don't break, we should collect all values for selected filter
+                    }
                 }
 
                 fieldValues.getValue(itemValue).count++;
@@ -78,11 +90,21 @@ export class DataStore {
 
         const fieldValuesList: FieldValues[] = [];
         fieldValues.forEach(value => {
+            if (value.field == 'status') {
+                let diff = 0;
+                value.values.forEach(value => {
+                   if (isDiffStatus(value.value)) {
+                       diff += value.count;
+                   }
+                });
+                value.values.push(new FilterValue('diff', diff))
+            }
+
             value.values.sort((a, b) => b.count - a.count);
             return fieldValuesList.push(value);
         });
 
-        rootNode.markUnpaired(false);
+        rootNode.addStatusClass(false);
         rootNode.collapseSingleChild();
         rootNode.addCounts();
 
@@ -183,16 +205,22 @@ export class Node /*implements FancytreeNode*/ {
         }
     }
 
-    markUnpaired(parentUnpaired: boolean) {
+    addStatusClass(parentUnpaired: boolean) {
         if (parentUnpaired) {
             this.title = "<span class='unpaired'>" + this.title + "</span>"
+        } else {
+            if (this.item != null) {
+                if (isDiffStatus(this.item.status)) {
+                    this.title = "<span class='" + this.item.status.toLowerCase() + "'>" + this.title + "</span>"
+                }
+            }
         }
 
         this.unpaired = parentUnpaired
             || (this.item != null && (this.item.status == "MISSED" || this.item.status == "UNEXPECTED"));
 
         for (let child of this._children) {
-            child.markUnpaired(this.unpaired)
+            child.addStatusClass(this.unpaired)
         }
     }
 }

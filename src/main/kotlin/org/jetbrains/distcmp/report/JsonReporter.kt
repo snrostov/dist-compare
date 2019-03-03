@@ -25,9 +25,9 @@ class JsonReporter(
 
     init {
         requireDir(reportDir)
-        removePreviousReport()
 
         diffDir = reportDir.resolve("diff")
+        removePreviousReport()
         diffDir.mkdir()
 
         requireDir(diffDir)
@@ -49,15 +49,16 @@ class JsonReporter(
 
     private fun removePreviousReport() {
         workManager.setProgressMessage("Removing previous report")
-        reportDir.deleteRecursively()
-        reportDir.mkdirs()
+        diffDir.deleteRecursively()
     }
 
     override fun close() {
         jsonWriter.endArray()
         jsonWriter.close()
         writer.close()
+    }
 
+    override fun show() {
         frontend?.run(reportDir)
     }
 
@@ -93,7 +94,16 @@ class JsonReporter(
         val address: InetSocketAddress = InetSocketAddress(8000),
         val openBrowser: Boolean = true
     ) {
+        companion object {
+            const val localJsDist = "js/dist"
+        }
+
+        private fun isSaveDevJs(reportDir: File) =
+            reportDir.canonicalPath == File(localJsDist).canonicalPath
+
         fun prepare(reportDir: File) {
+            if (isSaveDevJs(reportDir)) return
+
             listOf(
                 "2da2b42ac8b23e24cd2b832c22626baf.gif",
                 "app.js",
@@ -103,7 +113,8 @@ class JsonReporter(
                 val isLocalRun = resourceAsStream == null
 
                 if (isLocalRun) {
-                    val file = File("js/dist/$it")
+                    val file = File(localJsDist, it)
+
                     check(file.isFile) { "Cannot load $it from resources and from $file" }
                     Files.copy(
                         file.toPath(),
@@ -119,6 +130,11 @@ class JsonReporter(
         }
 
         fun run(reportDir: File) {
+            if (isSaveDevJs(reportDir)) {
+                println("`js/dist` dir mode: use `yarn watch` in `js/dist` dir, and open `js/dist/index.html from IDEA`")
+                return
+            }
+
             val server = HttpServer.create(InetSocketAddress(8000), 0)
             server.createContext("/", HttpServerHandler(reportDir))
             server.executor = null

@@ -17,14 +17,19 @@ fun main(args0: Array<String>) {
 
     reporter.beginReport()
 
-    Item("", "root")
-        .visit(
-            context,
-            manager.resolveFile(settings.expected, ""),
-            manager.resolveFile(settings.actual, "")
-        )
+    val root = Item(0, "", "root")
+    val visitor = ItemVisitor()
+
+    visitor.visit(
+        root,
+        context,
+        manager.resolveFile(settings.expected, ""),
+        manager.resolveFile(settings.actual, "")
+    )
 
     workManager.waitDone()
     reporter.close()
     workManager.reportDone(context)
+
+    workManager.setProgressMessage(visitor.stats)
 }

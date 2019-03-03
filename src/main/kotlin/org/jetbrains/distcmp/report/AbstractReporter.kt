@@ -14,10 +14,6 @@ abstract class AbstractReporter(
 ) :Reporter {
     val rootContext = DiffContext(settings, workManager, this)
 
-    override val diffs = AtomicInteger()
-    override val abortedDiffs = AtomicInteger()
-    override val itemsByDigest = ConcurrentHashMap<ByteBuffer, Int>()
-
     override fun dir(item: Item, body: (DiffContext) -> Unit) {
         body(rootContext)
     }
@@ -47,7 +43,7 @@ abstract class AbstractReporter(
 }
 
 data class FileInfo(
-    val id: Int,
+    val id: Long,
     val relativePath: String,
     val noExtension: Boolean,
     val extension: String,

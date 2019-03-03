@@ -84,7 +84,6 @@ class JsonReporter(
     }
 
     override fun writeDiffAborted(item: Item, reason: String) {
-        abortedDiffs.incrementAndGet()
         writeDiff(item) {
             println("[DIFF-ABORTED] $reason")
         }

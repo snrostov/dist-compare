@@ -8,9 +8,6 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
 interface Reporter {
-    val diffs: AtomicInteger
-    val abortedDiffs: AtomicInteger
-    val itemsByDigest: ConcurrentHashMap<ByteBuffer, Int>
     fun beginReport()
     fun close()
 

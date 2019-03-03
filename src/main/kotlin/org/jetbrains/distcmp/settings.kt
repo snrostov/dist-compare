@@ -72,7 +72,12 @@ class DiffSettings(args: Array<String>) {
 
     fun createReporter(workManager: WorkManager): Reporter =
         when {
-            teamCity -> TeamCityReporter(this, workManager, "root")
+            teamCity -> TeamCityReporter(
+                this,
+                workManager,
+                TeamCityReporter.Settings(true),
+                "root"
+            )
             else -> JsonReporter(
                 this,
                 workManager,

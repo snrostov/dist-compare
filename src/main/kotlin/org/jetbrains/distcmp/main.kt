@@ -11,7 +11,7 @@ fun main(args0: Array<String>) {
 
     val context = DiffContext(settings, workManager, reporter)
 
-    println("Comparing `${settings.expected}ted` vs `${settings.actual}` to `$reporter`")
+    println("Comparing `${settings.expected}` vs `${settings.actual}` to `$reporter`")
 
     workManager.startGathering()
 

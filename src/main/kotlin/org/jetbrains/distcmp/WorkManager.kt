@@ -3,11 +3,16 @@ package org.jetbrains.distcmp
 import jline.TerminalFactory
 import me.tongfei.progressbar.ProgressBar
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
-class WorkManager(val settings: DiffSettings) {
+interface IWorkManager {
+    fun submit(workTitle: String, work: () -> Unit): Future<*>
+}
+
+class WorkManager(val settings: DiffSettings) : IWorkManager {
     private val gatherting = AtomicBoolean(true)
     private val cpuExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
     private val progressBar: ProgressBar? =
@@ -23,8 +28,8 @@ class WorkManager(val settings: DiffSettings) {
         progressBar?.start()
     }
 
-    fun submit(workTitle: String, work: () -> Unit) {
-        cpuExecutor.submit {
+    override fun submit(workTitle: String, work: () -> Unit): Future<*> {
+        val f = cpuExecutor.submit {
             try {
                 setProgressMessage(workTitle)
                 work()
@@ -48,6 +53,8 @@ class WorkManager(val settings: DiffSettings) {
         if (!gatherting.get()) {
             updateProgressMaxHint()
         }
+
+        return f
     }
 
     fun io(work: () -> Unit) {

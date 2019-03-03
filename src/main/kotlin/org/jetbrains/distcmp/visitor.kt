@@ -32,7 +32,7 @@ class Item(val id: Long, val relativePath: String, ext: String) {
 
 data class DiffContext(
     val settings: DiffSettings,
-    val workManager: WorkManager,
+    val workManager: IWorkManager,
     val reporter: Reporter
 )
 

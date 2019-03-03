@@ -1,9 +1,9 @@
 interface Item {
-    id: String
-    relativePath: String
-    extension: String
-    status: String
-    kind: String
+    id: string
+    relativePath: string
+    extension: string
+    status: string
+    kind: string
     noExtension: boolean
     diffs: number,
     deltas: Array<number>
@@ -80,7 +80,7 @@ export class DataStore {
             let parent = rootNode;
             for (let childName of path) {
                 parent = parent.getChild(childName);
-                parent.count++;
+                parent.counts[item.status]++;
                 parent.diffs += item.diffs;
             }
 
@@ -93,9 +93,9 @@ export class DataStore {
             if (value.field == 'status') {
                 let diff = 0;
                 value.values.forEach(value => {
-                   if (isDiffStatus(value.value)) {
-                       diff += value.count;
-                   }
+                    if (isDiffStatus(value.value)) {
+                        diff += value.count;
+                    }
                 });
                 value.values.push(new FilterValue('diff', diff))
             }
@@ -149,7 +149,7 @@ export class Node /*implements FancytreeNode*/ {
     childrenByName: Map<string, Node> = new Map();
     _children: Node[] = [];
     diffs: number = 0;
-    count: number = 0;
+    counts: { [key: string]: number } = {MATCHED: 0, MISSED: 0, UNEXPECTED: 0, MISMATCHED: 0, COPY: 0};
     leaf: Item;
     item: Item;
     unpaired: boolean = false;
@@ -186,18 +186,28 @@ export class Node /*implements FancytreeNode*/ {
 
     addCounts() {
         if (this._children.length > 0) {
-            if (this.diffs > 0) {
-                this.title = this.title + " (" + this.count + " / " + this.diffs + ")"
-            } else {
-                this.title = this.title + " (" + this.count + ")"
+            let ok = 0;
+            let countHtml = '';
+            for (let status in this.counts) {
+                if (isDiffStatus(status)) {
+                    const statusCount = this.counts[status];
+                    if (statusCount != 0) {
+                        if (countHtml.length != 0) countHtml += ' / ';
+                        countHtml += "<span class='" + status.toLowerCase() + "'>" + this.counts[status] + "</span>"
+                    }
+                } else {
+                    ok += this.counts[status];
+                }
             }
+
+            if (ok > 0) {
+                countHtml += " / " + ok;
+            }
+
+            this.title = this.title + " (" + countHtml + ")";
 
             this.folder = true;
             this.lazy = true;
-        } else {
-            if (this.diffs > 0) {
-                this.title = this.title + " (" + this.diffs + ")"
-            }
         }
 
         for (let child of this._children) {

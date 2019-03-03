@@ -9,7 +9,9 @@ require('jquery.fancytree');
 require("diff2html/dist/diff2html.css");
 require('jquery.fancytree/dist/skin-lion/ui.fancytree.css');
 
-const selectedFilters = {};
+const selectedFilters = {
+    status: "diff"
+};
 
 export function renderWorkspace() {
     // force recreate all workspace, updating fancytree is hard
@@ -86,10 +88,11 @@ function filter(values: FieldValues) {
                 <option
                     key={value.value}
                     value={value.value}
+                    className={value.value.toLowerCase()}
                     onClick={() => selectFilter(values.field, value.value)}>
                     {value.value}
                     {" "}
-                    {values.selected ? "[" + value.count + "]" : "(" + value.count + ")"}
+                    {!values.selected || values.field == 'status' ? "(" + value.count + ")" : ""}
                 </option>
             )}
         </select>

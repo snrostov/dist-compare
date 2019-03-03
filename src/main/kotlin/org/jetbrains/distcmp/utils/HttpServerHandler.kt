@@ -2,7 +2,6 @@ package org.jetbrains.distcmp.utils
 
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpHandler
-import org.jetbrains.distcmp.DiffContext
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files

@@ -2,8 +2,6 @@ package org.jetbrains.distcmp
 
 import org.apache.commons.vfs2.VFS
 
-val devMode = System.getProperty("dev") != null
-
 val manager = VFS.getManager()
 
 fun main(args0: Array<String>) {

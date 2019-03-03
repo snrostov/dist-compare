@@ -52,7 +52,6 @@ class TeamCityReporter(
                     else -> error("DIR cannot be ${item.status}")
                 }
             )
-
         } else {
             send(TestStarted(name, false, null))
             if (dirUnpaired) {

@@ -1,9 +1,10 @@
 package org.jetbrains.distcmp.report
 
 import com.google.gson.GsonBuilder
-import com.google.gson.stream.JsonWriter
 import com.sun.net.httpserver.HttpServer
-import org.jetbrains.distcmp.*
+import org.jetbrains.distcmp.DiffSettings
+import org.jetbrains.distcmp.Item
+import org.jetbrains.distcmp.WorkManager
 import org.jetbrains.distcmp.utils.HttpServerHandler
 import org.jetbrains.distcmp.utils.requireDir
 import java.awt.Desktop
@@ -16,14 +17,13 @@ import java.nio.file.Files
 class JsonReporter(
     settings: DiffSettings,
     workManager: WorkManager,
-    givenReportDir: File?
+    givenReportDir: File?,
+    private val frontend: Frontend? = null
 ) : AbstractReporter(settings, workManager) {
-    private val reportDir: File
+    private val reportDir: File = givenReportDir ?: Files.createTempDirectory("dist-compare").toFile()
     private val diffDir: File
 
     init {
-        reportDir = givenReportDir ?: Files.createTempDirectory("dist-compare").toFile()
-
         requireDir(reportDir)
         removePreviousReport()
 
@@ -40,10 +40,10 @@ class JsonReporter(
         .create()
 
     val writer = diffDir.resolve("data.json").writer()
-    private val jsonWriter= gson.newJsonWriter(writer)
+    private val jsonWriter = gson.newJsonWriter(writer)
 
     override fun beginReport() {
-        if (settings.runFrontend) copyHtmlApp()
+        frontend?.prepare(reportDir)
         jsonWriter.beginArray()
     }
 
@@ -58,7 +58,7 @@ class JsonReporter(
         jsonWriter.close()
         writer.close()
 
-        if (settings.runFrontend) runServer()
+        frontend?.run(reportDir)
     }
 
     override fun writeItem(item: FileInfo, expected: String?, actual: String?) {
@@ -90,39 +90,48 @@ class JsonReporter(
         }
     }
 
-    private fun copyHtmlApp() {
-        listOf(
-            "2da2b42ac8b23e24cd2b832c22626baf.gif",
-            "app.js",
-            "index.html"
-        ).forEach {
-            val resourceAsStream = Item::class.java.getResourceAsStream("js/$it")
-            val isLocalRun = devMode || resourceAsStream == null
+    data class Frontend(
+        val address: InetSocketAddress = InetSocketAddress(8000),
+        val openBrowser: Boolean = true
+    ) {
+        fun prepare(reportDir: File) {
+            listOf(
+                "2da2b42ac8b23e24cd2b832c22626baf.gif",
+                "app.js",
+                "index.html"
+            ).forEach {
+                val resourceAsStream = Item::class.java.getResourceAsStream("js/$it")
+                val isLocalRun = resourceAsStream == null
 
-            if (isLocalRun) {
-                Files.copy(
-                    File("js/dist/$it").toPath(),
-                    File(reportDir, it).toPath()
-                )
-            } else {
-                Files.copy(
-                    resourceAsStream,
-                    File(reportDir, it).toPath()
-                )
+                if (isLocalRun) {
+                    val file = File("js/dist/$it")
+                    check(file.isFile) { "Cannot load $it from resources and from $file" }
+                    Files.copy(
+                        file.toPath(),
+                        File(reportDir, it).toPath()
+                    )
+                } else {
+                    Files.copy(
+                        resourceAsStream,
+                        File(reportDir, it).toPath()
+                    )
+                }
             }
         }
-    }
 
-    private fun runServer() {
-        println("Opening http://localhost:8000")
+        fun run(reportDir: File) {
+            val server = HttpServer.create(InetSocketAddress(8000), 0)
+            server.createContext("/", HttpServerHandler(reportDir))
+            server.executor = null
+            server.start()
 
-        val server = HttpServer.create(InetSocketAddress(8000), 0)
-        server.createContext("/", HttpServerHandler(reportDir))
-        server.executor = null
-        server.start()
-
-        if (Desktop.isDesktopSupported()) {
-            Desktop.getDesktop().browse(URI("http://localhost:8000"))
+            if (openBrowser) {
+                val url = URI("http", null, address.hostString, address.port, null, null, null)
+                println("Opening $url")
+                if (Desktop.isDesktopSupported()) {
+                    Desktop.getDesktop().browse(url)
+                }
+            }
         }
     }
 }

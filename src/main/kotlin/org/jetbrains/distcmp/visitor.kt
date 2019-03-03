@@ -281,13 +281,15 @@ class Item(val relativePath: String, ext: String) {
             expected.url.toURI()
         )
 
-        return if (context.settings.compareClassVerbose) {
-            // remove timestamp and checksumm
-            txt.lines().drop(3).joinToString("\n")
-        } else if (context.settings.compareClassVerboseIgnoreCompiledFrom) {
-            txt.lines().drop(1).joinToString("\n")
-        } else {
-            txt
+        return when {
+            context.settings.compareClassVerbose -> {
+                // remove timestamp and checksum
+                txt.lines().drop(3).joinToString("\n")
+            }
+            context.settings.compareClassVerboseIgnoreCompiledFrom -> {
+                txt.lines().drop(1).joinToString("\n")
+            }
+            else -> txt
         }
     }
 

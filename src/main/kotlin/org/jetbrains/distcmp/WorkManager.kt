@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class WorkManager(val settings: DiffSettings) {
-    private var gatherting = AtomicBoolean(true)
+    private val gatherting = AtomicBoolean(true)
     private val cpuExecutor = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors() - 1)
     private val progressBar: ProgressBar? =
         if (settings.showProgress) ProgressBar("", 1, 300)
@@ -33,6 +33,9 @@ class WorkManager(val settings: DiffSettings) {
                 if (!gatherting.get()) {
                     if (decrementAndGet == 0) {
                         cpuExecutor.shutdown()
+                        if (toDoIO.get() == 0) {
+                            ioExecutor.shutdown()
+                        }
                     }
                 }
             } catch (t: Throwable) {
@@ -52,8 +55,8 @@ class WorkManager(val settings: DiffSettings) {
             try {
                 work()
                 val decrementAndGet = toDoIO.decrementAndGet()
-                if (!gatherting.get()) {
-                    if (decrementAndGet == 0 && cpuExecutor.isShutdown) {
+                if (cpuExecutor.isShutdown) {
+                    if (decrementAndGet == 0) {
                         ioExecutor.shutdown()
                     }
                 }

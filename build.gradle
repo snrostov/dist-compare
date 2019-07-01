@@ -42,10 +42,12 @@ node {
     nodeModulesDir = file("${project.projectDir}/js")
 }
 
+clean.dependsOn yarn_cache_clean
+
 task yarnBuild(type: YarnTask) {
+    dependsOn yarn_install
     args = ['run', 'build']
 }
-
 
 jar {
     dependsOn(yarnBuild)

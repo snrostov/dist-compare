@@ -18,14 +18,15 @@ class TeamCityReporter(
     private val out = System.out
 
     var dirUnpaired = false
+    val suiteName = "Compare dist for JPS"
 
     override fun beginReport() {
-        send(TestSuiteStarted("root"))
+        send(TestSuiteStarted(suiteName))
     }
 
     override fun close() {
-        // don't use io thread as it is shooted down at this momemnt
-        out.println(TestSuiteFinished("root").asString())
+        // don't use io thread as it is shooted down at this moment
+        out.println(TestSuiteFinished(suiteName).asString())
     }
 
     override fun show() {
@@ -39,8 +40,7 @@ class TeamCityReporter(
     }
 
     override fun dir(item: Item, body: (DiffContext) -> Unit) {
-        val name = lastName(item.relativePath)
-        send(TestSuiteStarted(name))
+        lastName(item.relativePath)
 
         // wait until all work inside this dir to be done before going to next item
         // let its done by hooking workManager.submit
@@ -67,21 +67,21 @@ class TeamCityReporter(
                 it.get()
             }
         }
-
-        send(TestSuiteFinished(name))
     }
 
     override fun writeItem(item: FileInfo, expected: String?, actual: String?) {
-        val name = lastName(item.relativePath)
+        val relativePath = item.relativePath
+            .replace(Regex("[^A-Za-z0-9\\-/]"), "_")
+            .replace('/', '.')
+            .trim('.', '_')
 
         if (item.kind == FileKind.DIR) {
             dirUnpaired = true
-            val fakeDirTestName = ".dir"
-            send(TestStarted(fakeDirTestName, false, null))
+            send(TestStarted(relativePath, false, null))
             send(
                 when (item.status) {
-                    MISSED -> TestFailed(fakeDirTestName, "MISSED")
-                    UNEXPECTED -> TestFailed(fakeDirTestName, "UNEXPECTED")
+                    MISSED -> TestFailed(relativePath, "MISSED")
+                    UNEXPECTED -> TestFailed(relativePath, "UNEXPECTED")
                     else -> error("DIR cannot be ${item.status}")
                 }
             )
@@ -93,20 +93,20 @@ class TeamCityReporter(
                 }
             }
 
-            send(TestStarted(name, false, null))
-
-            if (dirUnpaired) {
-                send(TestIgnored(name, item.status.toString()))
+            if (item.status == COPY) {
+                send(TestIgnored(relativePath, item.status.toString()))
             } else {
-                send(
-                    when (item.status) {
-                        MATCHED -> TestFinished(name, 0)
-                        COPY -> TestIgnored(name, "COPY")
-                        MISSED -> TestFailed(name, "MISSED")
-                        UNEXPECTED -> TestFailed(name, "UNEXPECTED")
-                        MISMATCHED -> TestFailed(name, fakeMismatchedException, actual, expected)
-                    }
-                )
+                send(TestStarted(relativePath, false, null))
+
+                when (item.status) {
+                    MATCHED -> Unit
+                    COPY -> Unit
+                    MISSED -> send(TestFailed(relativePath, "MISSED"))
+                    UNEXPECTED -> send(TestFailed(relativePath, "UNEXPECTED"))
+                    MISMATCHED -> send(TestFailed(relativePath, fakeMismatchedException, actual, expected))
+                }
+
+                send(TestFinished(relativePath, 0))
             }
         }
     }

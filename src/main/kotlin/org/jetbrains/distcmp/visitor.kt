@@ -308,10 +308,11 @@ class ItemVisitor {
         expectedTxt: String,
         actualTxt: String
     ): Boolean {
-        val md5 = MessageDigest.getInstance("MD5")
-        md5.update(expectedTxt.toByteArray())
-        md5.update(actualTxt.toByteArray())
-        return isAlreadyAnalyzed(item, md5)
+        return false
+//        val md5 = MessageDigest.getInstance("MD5")
+//        md5.update(expectedTxt.toByteArray())
+//        md5.update(actualTxt.toByteArray())
+//        return isAlreadyAnalyzed(item, md5)
     }
 
     private fun isAlreadyAnalyzed(
